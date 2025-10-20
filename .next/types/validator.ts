@@ -36,6 +36,33 @@ type LayoutConfig<Route extends LayoutRoutes = LayoutRoutes> = {
 }
 
 
+// Validate ../../app/boiler/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/boiler">> = Specific
+  const handler = {} as typeof import("../../app/boiler/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/chiller/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/chiller">> = Specific
+  const handler = {} as typeof import("../../app/chiller/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/compliance/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/compliance">> = Specific
+  const handler = {} as typeof import("../../app/compliance/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../app/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/">> = Specific

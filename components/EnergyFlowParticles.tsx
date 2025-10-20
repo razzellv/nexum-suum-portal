@@ -37,3 +37,11 @@ export default function EnergyFlowParticles() {
 
   return <div ref={mountRef} className="absolute inset-0" />;
 }
+import { getGlideData } from "@/lib/glideData";
+useEffect(() => {
+  async function loadData() {
+    const data = await getGlideData();
+    console.log( "Fetched data:", data);
+  }
+  loadData();
+}, []);
