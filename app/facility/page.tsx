@@ -2,14 +2,18 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { Building2 } from "lucide-react";
 import { FACILITY_INTELLIGENCE } from "@/app/lib/products";
 import type { LibraryDocument } from "@/app/lib/products";
 
-const FACILITY_SHEET_URL =
+const SHEET_URL =
   "https://script.google.com/macros/s/AKfycbwPaDRoieGEY-6WOrVzUX1JsQlHqIIV2SExc4binnXaqtdvzd4sv5XSw4KIOLkLIkcH/exec";
 
 const LOOKER_URL =
   "https://datastudio.google.com/embed/reporting/d8aa2097-4b2a-42c1-913c-d644f26f890b/page/WrJaF";
+
+const ACCENT = "#fbbf24";
+const ACCENT_RGB = "251, 191, 36";
 
 type Tab = "overview" | "log-data" | "resources" | "notes";
 
@@ -28,9 +32,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 const DOCS = FACILITY_INTELLIGENCE.documents;
 const SOP_DOCS = DOCS.filter((d) => d.file.includes("/sops/"));
-const COMPLIANCE_DOCS = DOCS.filter((d) =>
-  d.file.includes("/compliance-templates/")
-);
+const COMPLIANCE_DOCS = DOCS.filter((d) => d.file.includes("/compliance-templates/"));
 const CALCULATOR_DOCS = DOCS.filter((d) => d.file.includes("/calculators/"));
 
 function TypeBadge({ type }: { type: LibraryDocument["type"] }) {
@@ -40,45 +42,39 @@ function TypeBadge({ type }: { type: LibraryDocument["type"] }) {
     xlsx: "bg-green-900/40 text-green-400 border-green-700/50",
   };
   return (
-    <span
-      className={`px-2 py-0.5 rounded text-xs font-mono border uppercase ${
-        colors[type] ?? ""
-      }`}
-    >
+    <span className={`px-2 py-0.5 rounded text-xs font-mono border uppercase ${colors[type] ?? ""}`}>
       {type}
     </span>
   );
 }
 
-function DocSection({
-  title,
-  docs,
-}: {
-  title: string;
-  docs: LibraryDocument[];
-}) {
+function DocSection({ title, docs }: { title: string; docs: LibraryDocument[] }) {
   if (docs.length === 0) return null;
   return (
     <div className="mb-8">
-      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">
-        {title}
-      </h3>
+      <h3 className="text-xs font-semibold text-[hsl(200_15%_55%)] uppercase tracking-widest mb-3">{title}</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {docs.map((doc) => (
           <div
             key={doc.file}
-            className="flex items-center justify-between gap-3 p-4 rounded-xl bg-[#0a1628] border border-[#1a3a5c] hover:border-[#ffb800]/40 hover:shadow-[0_0_20px_rgba(255,184,0,0.1)] transition-all"
+            className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[hsl(200_30%_18%)] transition-all"
+            style={{ background: "hsl(200 50% 8%)" }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLDivElement).style.borderColor = `rgba(${ACCENT_RGB}, 0.4)`;
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLDivElement).style.borderColor = "hsl(200 30% 18%)";
+            }}
           >
             <div className="min-w-0">
-              <p className="text-sm text-white font-medium truncate mb-1">
-                {doc.label}
-              </p>
+              <p className="text-sm text-[hsl(200_18%_84%)] font-medium truncate mb-1">{doc.label}</p>
               <TypeBadge type={doc.type} />
             </div>
             <a
               href={`/library/${doc.file}`}
               download
-              className="shrink-0 px-3 py-1.5 rounded-lg bg-[#ffb800]/10 border border-[#ffb800]/30 text-[#ffb800] text-xs font-medium hover:bg-[#ffb800]/20 transition-all"
+              className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+              style={{ background: `rgba(${ACCENT_RGB}, 0.08)`, border: `1px solid rgba(${ACCENT_RGB}, 0.3)`, color: ACCENT }}
             >
               Download
             </a>
@@ -117,9 +113,15 @@ const EMPTY_FORM = {
   techName: "",
 };
 
+const inputCls =
+  "bg-[hsl(200_30%_12%)] border border-[hsl(200_30%_22%)] text-[hsl(200_18%_84%)] rounded-lg px-3 py-2 w-full focus:border-[#fbbf24] focus:outline-none focus:ring-1 focus:ring-amber-400/50 placeholder-[hsl(200_15%_40%)] text-sm transition-all";
+
+const selectCls =
+  "bg-[hsl(200_30%_12%)] border border-[hsl(200_30%_22%)] text-[hsl(200_18%_84%)] rounded-lg px-3 py-2 w-full focus:border-[#fbbf24] focus:outline-none focus:ring-1 focus:ring-amber-400/50 text-sm transition-all appearance-none";
+
 export default function FacilityPage() {
   const [tab, setTab] = useState<Tab>("overview");
-  const [toast, setToast] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState("");
@@ -141,15 +143,8 @@ export default function FacilityPage() {
     }
   }
 
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 4000);
-  }
-
   function handleFormChange(
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   }
@@ -158,25 +153,22 @@ export default function FacilityPage() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await fetch(FACILITY_SHEET_URL, {
+      await fetch(SHEET_URL, {
         method: "POST",
         mode: "no-cors",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ system: "facility", ...form }),
       });
     } catch {}
-    showToast("Entry logged — Looker Studio will update shortly");
+    setSubmitted(true);
     setForm({ ...EMPTY_FORM, date: todayStr() });
     setSubmitting(false);
+    setTimeout(() => setSubmitted(false), 6000);
   }
 
   function addNote() {
     if (!newNote.trim()) return;
-    const note: Note = {
-      id: Date.now().toString(),
-      text: newNote.trim(),
-      timestamp: Date.now(),
-    };
+    const note: Note = { id: Date.now().toString(), text: newNote.trim(), timestamp: Date.now() };
     saveNotes([note, ...notes]);
     setNewNote("");
   }
@@ -185,81 +177,77 @@ export default function FacilityPage() {
     saveNotes(notes.filter((n) => n.id !== id));
   }
 
-  const selectClass =
-    "w-full px-4 py-2.5 rounded-lg bg-[#0a1628] border border-[#1a3a5c] text-white focus:outline-none focus:border-[#ffb800]/60 focus:shadow-[0_0_10px_rgba(255,184,0,0.15)] transition-all text-sm appearance-none";
-
-  const inputClass =
-    "w-full px-4 py-2.5 rounded-lg bg-[#0a1628] border border-[#1a3a5c] text-white placeholder-gray-600 focus:outline-none focus:border-[#ffb800]/60 focus:shadow-[0_0_10px_rgba(255,184,0,0.15)] transition-all text-sm";
-
   return (
-    <div className="min-h-screen bg-[#020810] px-4 py-10 max-w-6xl mx-auto">
-      {toast && (
-        <div className="fixed top-20 right-4 z-50 px-5 py-3 rounded-xl bg-[#ffb800]/10 border border-[#ffb800]/50 text-[#ffb800] text-sm font-medium shadow-[0_0_20px_rgba(255,184,0,0.3)]">
-          ✓ {toast}
-        </div>
-      )}
-
+    <div className="max-w-6xl mx-auto">
+      {/* Page header */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
-          <span className="text-3xl">🏭</span>
-          <h1 className="text-3xl font-bold text-white">Facility Intelligence Portal</h1>
+          <div
+            className="w-10 h-10 rounded-lg flex items-center justify-center"
+            style={{ background: `rgba(${ACCENT_RGB}, 0.1)`, border: `1px solid rgba(${ACCENT_RGB}, 0.3)` }}
+          >
+            <Building2 size={20} style={{ color: ACCENT }} />
+          </div>
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-[hsl(200_18%_84%)]">Facility Intelligence</h1>
+              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-900/30 border border-green-700/50 text-green-400">
+                ● ACTIVE
+              </span>
+            </div>
+            <p className="text-sm text-[hsl(200_15%_55%)]">9-system SOPs · Compliance · Multi-system logging</p>
+          </div>
         </div>
-        <p className="text-gray-400">
-          Full-facility system intelligence — SOPs, compliance templates, and multi-system log entry.
-        </p>
       </div>
 
-      <div className="flex gap-1 mb-8 p-1 rounded-xl bg-[#0a1628] border border-[#1a3a5c] w-fit flex-wrap">
+      {/* Tab bar */}
+      <div
+        className="flex gap-1 mb-8 p-1 rounded-lg border border-[hsl(200_30%_18%)] w-fit flex-wrap"
+        style={{ background: "hsl(200 50% 8%)" }}
+      >
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              tab === t.id
-                ? "bg-[#ffb800]/20 text-[#ffb800] border border-[#ffb800]/40 shadow-[0_0_10px_rgba(255,184,0,0.2)]"
-                : "text-gray-400 hover:text-gray-200"
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              tab === t.id ? "border" : "text-[hsl(200_15%_55%)] hover:text-[hsl(200_18%_84%)]"
             }`}
+            style={
+              tab === t.id
+                ? { background: `rgba(${ACCENT_RGB}, 0.12)`, borderColor: `rgba(${ACCENT_RGB}, 0.35)`, color: ACCENT }
+                : {}
+            }
           >
             {t.label}
           </button>
         ))}
       </div>
 
+      {/* Overview */}
       {tab === "overview" && (
         <div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
             {[
-              {
-                icon: "📋",
-                title: "9 System SOPs",
-                desc: "Boiler, chiller, pump, AHU, cooling tower, water treatment, electrical, air compressor, and feedwater SOPs in one place.",
-              },
-              {
-                icon: "✅",
-                title: "Compliance Ready",
-                desc: "Compliance handbook and reference guide covering regulatory requirements for boilers, chillers, and facility systems.",
-              },
-              {
-                icon: "📊",
-                title: "Facility Dashboard",
-                desc: "Live Looker Studio analytics pulling from your multi-system log entries for facility-wide performance tracking.",
-              },
+              { stat: "9 System SOPs", desc: "Boiler, chiller, pump, AHU, and more" },
+              { stat: "Compliance Ready", desc: "Handbook & reference guide included" },
+              { stat: "Live Dashboard", desc: "Looker Studio facility analytics" },
             ].map((card) => (
               <div
-                key={card.title}
-                className="p-5 rounded-xl bg-[#0a1628] border border-[#1a3a5c] hover:border-[#ffb800]/40 hover:shadow-[0_0_20px_rgba(255,184,0,0.15)] transition-all"
+                key={card.stat}
+                className="p-5 rounded-xl border transition-all"
+                style={{ background: "hsl(200 50% 10%)", borderColor: `rgba(${ACCENT_RGB}, 0.2)` }}
               >
-                <div className="text-2xl mb-3">{card.icon}</div>
-                <h3 className="font-semibold text-white mb-2">{card.title}</h3>
-                <p className="text-sm text-gray-400">{card.desc}</p>
+                <p className="text-xl font-bold mb-1" style={{ color: ACCENT }}>{card.stat}</p>
+                <p className="text-sm text-[hsl(200_15%_55%)]">{card.desc}</p>
               </div>
             ))}
           </div>
 
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Facility Performance Dashboard
-          </h2>
-          <div className="rounded-xl overflow-hidden border border-[#1a3a5c] mb-3">
+          <h2 className="text-base font-semibold text-[hsl(200_18%_84%)] mb-4">Facility Performance Dashboard</h2>
+          <div
+            className="rounded-xl overflow-hidden mb-3"
+            style={{ border: `1px solid rgba(${ACCENT_RGB}, 0.3)`, boxShadow: `0 0 20px rgba(${ACCENT_RGB}, 0.08)` }}
+          >
             <iframe
               src={LOOKER_URL}
               width="100%"
@@ -270,59 +258,46 @@ export default function FacilityPage() {
               title="Facility Looker Studio Dashboard"
             />
           </div>
-          <p className="text-xs text-gray-500">
-            Data updates when entries are submitted in the Log Data tab.
+          <p className="text-xs text-[hsl(200_15%_45%)]">
+            Submit readings in the Log Data tab to update this dashboard.
           </p>
         </div>
       )}
 
+      {/* Log Data */}
       {tab === "log-data" && (
         <div>
-          <h2 className="text-lg font-semibold text-white mb-2">Log Facility Data</h2>
-          <p className="text-sm text-gray-400 mb-6">
-            Submit a system observation to your Google Sheet. Data feeds directly into the Looker Studio dashboard.
+          <h2 className="text-base font-semibold text-[hsl(200_18%_84%)] mb-1">Log Facility Data</h2>
+          <p className="text-sm text-[hsl(200_15%_55%)] mb-6">
+            Submit a system observation. Data feeds directly into the Looker Studio dashboard.
           </p>
-          <form onSubmit={handleSubmit} className="space-y-5 max-w-2xl">
+
+          {submitted && (
+            <div
+              className="mb-6 p-4 rounded-lg border flex items-center gap-3"
+              style={{ background: `rgba(${ACCENT_RGB}, 0.08)`, borderColor: `rgba(${ACCENT_RGB}, 0.4)`, color: ACCENT }}
+            >
+              <span className="text-lg">✓</span>
+              <span className="text-sm font-semibold">Entry logged — Looker Studio will update within minutes.</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4 max-w-2xl">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Date</label>
-              <input
-                type="date"
-                name="date"
-                value={form.date}
-                onChange={handleFormChange}
-                className={inputClass}
-              />
+              <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">Date</label>
+              <input type="date" name="date" value={form.date} onChange={handleFormChange} className={inputCls} />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Facility Name</label>
-              <input
-                type="text"
-                name="facilityName"
-                value={form.facilityName}
-                onChange={handleFormChange}
-                placeholder="e.g. North Campus Building A"
-                className={inputClass}
-              />
+              <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">Facility Name</label>
+              <input type="text" name="facilityName" value={form.facilityName} onChange={handleFormChange} placeholder="e.g. North Campus Building A" className={inputCls} />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">System / Equipment</label>
-              <input
-                type="text"
-                name="systemEquipment"
-                value={form.systemEquipment}
-                onChange={handleFormChange}
-                placeholder="e.g. Chiller 2, AHU-03"
-                className={inputClass}
-              />
+              <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">System / Equipment</label>
+              <input type="text" name="systemEquipment" value={form.systemEquipment} onChange={handleFormChange} placeholder="e.g. Chiller 2, AHU-03" className={inputCls} />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">System Type</label>
-              <select
-                name="systemType"
-                value={form.systemType}
-                onChange={handleFormChange}
-                className={selectClass}
-              >
+              <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">System Type</label>
+              <select name="systemType" value={form.systemType} onChange={handleFormChange} className={selectCls}>
                 <option value="">Select system type…</option>
                 <option>Boiler</option>
                 <option>Chiller</option>
@@ -334,24 +309,12 @@ export default function FacilityPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Observation / Reading</label>
-              <input
-                type="text"
-                name="observationReading"
-                value={form.observationReading}
-                onChange={handleFormChange}
-                placeholder="e.g. Supply temp 48°F, 320 GPM, 95 kW"
-                className={inputClass}
-              />
+              <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">Observation / Reading</label>
+              <input type="text" name="observationReading" value={form.observationReading} onChange={handleFormChange} placeholder="e.g. Supply temp 48°F, 320 GPM, 95 kW" className={inputCls} />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Operating Status</label>
-              <select
-                name="operatingStatus"
-                value={form.operatingStatus}
-                onChange={handleFormChange}
-                className={selectClass}
-              >
+              <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">Operating Status</label>
+              <select name="operatingStatus" value={form.operatingStatus} onChange={handleFormChange} className={selectCls}>
                 <option value="">Select status…</option>
                 <option>Normal</option>
                 <option>Warning</option>
@@ -360,55 +323,30 @@ export default function FacilityPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Corrective Action Taken</label>
-              <input
-                type="text"
-                name="correctiveAction"
-                value={form.correctiveAction}
-                onChange={handleFormChange}
-                placeholder="e.g. Adjusted set point, replaced filter"
-                className={inputClass}
-              />
+              <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">Corrective Action Taken</label>
+              <input type="text" name="correctiveAction" value={form.correctiveAction} onChange={handleFormChange} placeholder="e.g. Adjusted set point, replaced filter" className={inputCls} />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Follow-Up Required</label>
-              <select
-                name="followUpRequired"
-                value={form.followUpRequired}
-                onChange={handleFormChange}
-                className={selectClass}
-              >
+              <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">Follow-Up Required</label>
+              <select name="followUpRequired" value={form.followUpRequired} onChange={handleFormChange} className={selectCls}>
                 <option value="">Select…</option>
                 <option>Yes</option>
                 <option>No</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Compliance Notes</label>
-              <textarea
-                name="complianceNotes"
-                value={form.complianceNotes}
-                onChange={handleFormChange}
-                rows={3}
-                placeholder="Any regulatory or compliance observations..."
-                className={`${inputClass} resize-none`}
-              />
+              <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">Compliance Notes</label>
+              <textarea name="complianceNotes" value={form.complianceNotes} onChange={handleFormChange} rows={3} placeholder="Any regulatory or compliance observations..." className={`${inputCls} resize-none`} />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Technician Name</label>
-              <input
-                type="text"
-                name="techName"
-                value={form.techName}
-                onChange={handleFormChange}
-                placeholder="Full name"
-                className={inputClass}
-              />
+              <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">Technician Name</label>
+              <input type="text" name="techName" value={form.techName} onChange={handleFormChange} placeholder="Full name" className={inputCls} />
             </div>
             <button
               type="submit"
               disabled={submitting}
-              className="px-6 py-3 rounded-xl bg-[#ffb800]/10 border border-[#ffb800]/40 text-[#ffb800] font-semibold hover:bg-[#ffb800]/20 hover:shadow-[0_0_20px_rgba(255,184,0,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="font-semibold px-6 py-2 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              style={{ background: ACCENT, color: "#001923" }}
             >
               {submitting ? "Submitting…" : "Submit Log Entry"}
             </button>
@@ -416,34 +354,33 @@ export default function FacilityPage() {
         </div>
       )}
 
+      {/* Resources */}
       {tab === "resources" && (
         <div>
-          <h2 className="text-lg font-semibold text-white mb-6">
-            Facility Resource Library
-          </h2>
+          <h2 className="text-base font-semibold text-[hsl(200_18%_84%)] mb-6">Facility Resource Library</h2>
           <DocSection title="SOPs" docs={SOP_DOCS} />
           <DocSection title="Compliance Templates" docs={COMPLIANCE_DOCS} />
           <DocSection title="Calculators / Dashboards" docs={CALCULATOR_DOCS} />
         </div>
       )}
 
+      {/* Notes */}
       {tab === "notes" && (
         <div>
-          <h2 className="text-lg font-semibold text-white mb-2">Facility Notes</h2>
-          <p className="text-sm text-gray-400 mb-6">
-            Private notes stored in your browser. For team-wide notes, upgrade to the FI Platform.
-          </p>
+          <h2 className="text-base font-semibold text-[hsl(200_18%_84%)] mb-1">Facility Notes</h2>
+          <p className="text-sm text-[hsl(200_15%_55%)] mb-6">Private notes stored in your browser.</p>
           <div className="mb-6 max-w-2xl">
             <textarea
               value={newNote}
               onChange={(e) => setNewNote(e.target.value)}
               rows={4}
               placeholder="Add a note about facility systems, issues, or follow-ups..."
-              className="w-full px-4 py-3 rounded-xl bg-[#0a1628] border border-[#1a3a5c] text-white placeholder-gray-600 focus:outline-none focus:border-[#ffb800]/60 focus:shadow-[0_0_10px_rgba(255,184,0,0.15)] transition-all text-sm resize-none mb-3"
+              className={`${inputCls} resize-none mb-3`}
             />
             <button
               onClick={addNote}
-              className="px-5 py-2.5 rounded-xl bg-[#ffb800]/10 border border-[#ffb800]/40 text-[#ffb800] font-semibold hover:bg-[#ffb800]/20 hover:shadow-[0_0_20px_rgba(255,184,0,0.3)] transition-all text-sm"
+              className="font-semibold px-5 py-2 rounded-lg transition-all text-sm"
+              style={{ background: ACCENT, color: "#001923" }}
             >
               Save Note
             </button>
@@ -451,25 +388,22 @@ export default function FacilityPage() {
 
           <div className="space-y-3 max-w-2xl mb-10">
             {notes.length === 0 && (
-              <p className="text-gray-600 text-sm">No notes yet. Add one above.</p>
+              <p className="text-sm text-[hsl(200_15%_45%)]">No notes yet. Add your first observation.</p>
             )}
             {notes.map((note) => (
               <div
                 key={note.id}
-                className="p-4 rounded-xl bg-[#0a1628] border border-[#1a3a5c]"
+                className="p-4 rounded-lg border border-[hsl(200_30%_18%)]"
+                style={{ background: "hsl(200 50% 8%)" }}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs text-gray-500 mb-1">
-                      {formatTimestamp(note.timestamp)}
-                    </p>
-                    <p className="text-sm text-gray-200 whitespace-pre-wrap">
-                      {note.text}
-                    </p>
+                    <p className="text-xs text-[hsl(200_15%_45%)] mb-1">{formatTimestamp(note.timestamp)}</p>
+                    <p className="text-sm text-[hsl(200_18%_84%)] whitespace-pre-wrap">{note.text}</p>
                   </div>
                   <button
                     onClick={() => deleteNote(note.id)}
-                    className="shrink-0 text-gray-600 hover:text-red-400 transition-colors text-xs"
+                    className="shrink-0 text-red-500/60 hover:text-red-400 transition-colors text-xs"
                   >
                     Delete
                   </button>
@@ -478,13 +412,17 @@ export default function FacilityPage() {
             ))}
           </div>
 
-          <div className="max-w-2xl p-5 rounded-xl bg-[#0a1628] border border-[#ffb800]/20">
-            <p className="text-sm text-gray-400 mb-3">
-              Upgrade to FI Platform for team-wide notes, API sync, and advanced diagnostics.
+          <div
+            className="max-w-2xl p-5 rounded-xl border"
+            style={{ background: "hsl(200 50% 8%)", borderColor: `rgba(${ACCENT_RGB}, 0.2)` }}
+          >
+            <p className="text-sm text-[hsl(200_15%_55%)] mb-3">
+              Upgrade to FI Platform for team notes, API sync, and full diagnostic history.
             </p>
             <Link
               href="/pricing"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#ffb800]/10 border border-[#ffb800]/40 text-[#ffb800] text-sm font-semibold hover:bg-[#ffb800]/20 transition-all"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+              style={{ background: `rgba(${ACCENT_RGB}, 0.1)`, border: `1px solid rgba(${ACCENT_RGB}, 0.35)`, color: ACCENT }}
             >
               Upgrade to FI Platform →
             </Link>
