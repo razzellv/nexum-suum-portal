@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Flame, Snowflake, Building2 } from "lucide-react";
+import { Flame, Snowflake, Building2, Shield, FileCheck } from "lucide-react";
 
 const packages = [
   {
@@ -39,8 +39,34 @@ const packages = [
     bullets: [
       "9-system SOPs (boiler to electrical)",
       "Compliance handbook & templates",
-      "Virtuous ethical logger",
+      "System logs, workbooks & calculators",
       "Looker Studio live dashboard",
+    ],
+  },
+  {
+    title: "Virtuous Ethics Logger",
+    href: "/virtuous",
+    Icon: Shield,
+    accent: "#c084fc",
+    accentRgb: "192, 132, 252",
+    bullets: [
+      "10 log types — safety, ethics, recognition",
+      "Anonymous reporting option",
+      "Facility Client Dashboard (Excel)",
+      "Virtuous Ethical Logger workbook",
+    ],
+  },
+  {
+    title: "Compliance Center",
+    href: "/compliance",
+    Icon: FileCheck,
+    accent: "#fb923c",
+    accentRgb: "251, 146, 60",
+    bullets: [
+      "OSHA, EPA & fire compliance checklist",
+      "Boiler, chiller & permit tracking",
+      "Compliance Handbook & Reference Guide",
+      "24-item interactive checklist w/ progress",
     ],
   },
 ];
@@ -71,7 +97,7 @@ export default function HomePage() {
       </section>
 
       {/* Package cards */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
         {packages.map((pkg) => {
           const Icon = pkg.Icon;
           return (

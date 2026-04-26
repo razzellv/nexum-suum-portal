@@ -10,13 +10,17 @@ import {
   ChevronLeft,
   ChevronRight,
   Zap,
+  Shield,
+  FileCheck,
 } from "lucide-react";
 
 const navItems = [
-  { name: "Overview", href: "/", icon: LayoutDashboard, color: "text-purple-400" },
-  { name: "Boiler Intelligence", href: "/boiler", icon: Flame, color: "text-[#00FFE1]" },
-  { name: "Chiller Intelligence", href: "/chiller", icon: Snowflake, color: "text-sky-400" },
-  { name: "Facility Intelligence", href: "/facility", icon: Building2, color: "text-amber-400" },
+  { name: "Overview",             href: "/",           icon: LayoutDashboard, color: "text-purple-400"   },
+  { name: "Boiler Intelligence",  href: "/boiler",     icon: Flame,           color: "text-[#00FFE1]"    },
+  { name: "Chiller Intelligence", href: "/chiller",    icon: Snowflake,       color: "text-sky-400"      },
+  { name: "Facility Intelligence",href: "/facility",   icon: Building2,       color: "text-amber-400"    },
+  { name: "Virtuous Ethics Log",  href: "/virtuous",   icon: Shield,          color: "text-purple-400"   },
+  { name: "Compliance Center",    href: "/compliance", icon: FileCheck,       color: "text-amber-400"    },
 ];
 
 interface SidebarProps {
