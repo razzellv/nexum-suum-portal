@@ -135,8 +135,8 @@ export const BOILER_INTELLIGENCE_LOOKER: Product = {
     'Live data analyzer integration',
   ],
   documents: BOILER_DOCS,
-  lookerEmbedUrl:  '', // TODO: add Looker Studio embed URL when published
-  dataEntrySheet:  '', // TODO: add Google Sheet ID when available
+  lookerEmbedUrl:  'https://datastudio.google.com/embed/reporting/4456f0c6-262f-4b8b-aba0-7eacd0be494e/page/H3TaF',
+  dataEntrySheet:  'https://docs.google.com/spreadsheets/d/1eb23XG-3YfRn6wh0dE5CkZ1ybkX23DCvWOJ_4Cc5c8s/edit?usp=sharing',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -199,8 +199,8 @@ export const CHILLER_INTELLIGENCE_LOOKER: Product = {
     'Live data analyzer integration',
   ],
   documents: CHILLER_DOCS,
-  lookerEmbedUrl:  '', // TODO: add Looker Studio embed URL when published
-  dataEntrySheet:  '', // TODO: add Google Sheet ID when available
+  lookerEmbedUrl:  'https://datastudio.google.com/embed/reporting/29067deb-fc12-4d99-a2a3-47291d3b2019/page/4Z2aF',
+  dataEntrySheet:  'https://docs.google.com/spreadsheets/d/12J28A_yUZsY9tz0GA4G6i_VY_AQoV-kpxkRz4aZIbA4/edit?usp=sharing',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -262,8 +262,8 @@ export const FACILITY_INTELLIGENCE_ADVANCED: Product = {
     'Organization performance tracking',
   ],
   documents: FACILITY_DOCS,
-  lookerEmbedUrl:  '', // TODO: add Looker Studio embed URL when published
-  dataEntrySheet:  '', // TODO: add Google Sheet ID when available
+  lookerEmbedUrl:  'https://datastudio.google.com/embed/reporting/d8aa2097-4b2a-42c1-913c-d644f26f890b/page/WrJaF',
+  dataEntrySheet:  'https://docs.google.com/spreadsheets/d/1OV6N3-qISmM2G4vgaRvdbrTPx9isXDRZCwzGrDv4yCM/edit?usp=sharing',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -305,7 +305,9 @@ export const THERMODYNAMICS_MAINTENANCE: Product = {
     'Mechanical efficiency guide',
   ],
   documents: [
-    // TODO: file not in current zip — add when document is delivered
+    { label: 'Thermodynamics & Boilers — Modules 1 & 2', file: 'documents/Nexum_Suum_Module1_2_Thermodynamics_Boilers.docx', type: 'docx' },
+    { label: 'Thermodynamics & Boilers — Modules 3 & 4', file: 'documents/Nexum_Suum_Module3_4_Thermodynamics_Boilers.docx', type: 'docx' },
+    { label: 'Thermodynamics & Boilers — Modules 5 & 6', file: 'documents/Nexum_Suum_Module5_6_Thermodynamics_Boilers.docx', type: 'docx' },
   ],
   fiasDocGenKey: 'thermodynamics_maintenance',
 };
