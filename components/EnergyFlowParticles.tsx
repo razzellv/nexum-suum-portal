@@ -3,14 +3,17 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
 export default function EnergyFlowParticles() {
-  const mountRef = useRef(null);
+  const mountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!mountRef.current) return;
+    const mount = mountRef.current;
+
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    mountRef.current.appendChild(renderer.domElement);
+    mount.appendChild(renderer.domElement);
 
     const geometry = new THREE.SphereGeometry(0.03, 12, 12);
     const material = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
@@ -32,16 +35,12 @@ export default function EnergyFlowParticles() {
     };
     animate();
 
-    return () => mountRef.current.removeChild(renderer.domElement);
+    return () => {
+      if (mount.contains(renderer.domElement)) {
+        mount.removeChild(renderer.domElement);
+      }
+    };
   }, []);
 
   return <div ref={mountRef} className="absolute inset-0" />;
 }
-import { getGlideData } from "@/lib/glideData";
-useEffect(() => {
-  async function loadData() {
-    const data = await getGlideData();
-    console.log( "Fetched data:", data);
-  }
-  loadData();
-}, []);
