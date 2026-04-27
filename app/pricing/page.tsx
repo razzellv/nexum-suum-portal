@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-const PRICING_URL = "https://nexumsuum-facilityintelligence.com/pricing";
+const PRICING_URL = "https://portal.nexumsuum-facilityintelligence.com/pricing";
 
 const plans = [
   {
