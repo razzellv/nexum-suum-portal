@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { Snowflake } from "lucide-react";
+import { Snowflake, Thermometer, Zap, Droplets, BarChart3 } from "lucide-react";
 import { CHILLER_INTELLIGENCE } from "@/app/lib/products";
-import type { LibraryDocument } from "@/app/lib/products";
+import {
+  PageHeader, TabBar, StatCard, SectionHeader,
+  Card, CardContent, DocCard, UpgradeBanner, inputCls,
+} from "@/components/ui";
 
 const SHEET_URL =
   "https://script.google.com/macros/s/AKfycbxmbYPEuVIRL_pb2BJxcjnli5UYyUe0M2kI6NedHk9bBu3FuYhex1lAuDYv1psACGL9/exec";
@@ -12,403 +14,226 @@ const SHEET_URL =
 const LOOKER_URL =
   "https://datastudio.google.com/embed/reporting/29067deb-fc12-4d99-a2a3-47291d3b2019/page/4Z2aF";
 
-const ACCENT = "#38bdf8";
+const ACCENT     = "#38bdf8";
 const ACCENT_RGB = "56, 189, 248";
 
 type Tab = "overview" | "log-data" | "resources" | "notes";
 
-interface Note {
-  id: string;
-  text: string;
-  timestamp: number;
-}
+interface Note { id: string; text: string; timestamp: number }
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "log-data", label: "Log Data" },
+  { id: "overview",  label: "Overview"  },
+  { id: "log-data",  label: "Log Data"  },
   { id: "resources", label: "Resources" },
-  { id: "notes", label: "Notes" },
+  { id: "notes",     label: "Notes"     },
 ];
 
-const DOCS = CHILLER_INTELLIGENCE.documents;
-const GUIDE_DOCS = DOCS.filter((d) => d.file.includes("/guide/"));
-const LOG_DOCS = DOCS.filter((d) => d.file.includes("/logs/"));
-const EXTRA_DOCS = DOCS.filter(
-  (d) => !d.file.includes("/guide/") && !d.file.includes("/logs/")
-);
+const DOCS  = CHILLER_INTELLIGENCE.documents;
+const GUIDE = DOCS.filter((d) => d.file.includes("/guide/"));
+const LOGS  = DOCS.filter((d) => d.file.includes("/logs/"));
+const EXTRA = DOCS.filter((d) => !d.file.includes("/guide/") && !d.file.includes("/logs/"));
 
-function TypeBadge({ type }: { type: LibraryDocument["type"] }) {
-  const colors: Record<string, string> = {
-    pdf: "bg-red-900/40 text-red-400 border-red-700/50",
-    docx: "bg-blue-900/40 text-blue-400 border-blue-700/50",
-    xlsx: "bg-green-900/40 text-green-400 border-green-700/50",
-  };
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs font-mono border uppercase ${colors[type] ?? ""}`}>
-      {type}
-    </span>
-  );
+function fmt(ts: number) {
+  return new Date(ts).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
 }
+function todayStr() { return new Date().toISOString().split("T")[0]; }
 
-function DocSection({ title, docs }: { title: string; docs: LibraryDocument[] }) {
-  if (docs.length === 0) return null;
-  return (
-    <div className="mb-8">
-      <h3 className="text-xs font-semibold text-[hsl(200_15%_55%)] uppercase tracking-widest mb-3">{title}</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {docs.map((doc) => (
-          <div
-            key={doc.file}
-            className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[hsl(200_30%_18%)] hover:border-sky-400/40 transition-all"
-            style={{ background: "hsl(200 50% 8%)" }}
-          >
-            <div className="min-w-0">
-              <p className="text-sm text-[hsl(200_18%_84%)] font-medium truncate mb-1">{doc.label}</p>
-              <TypeBadge type={doc.type} />
-            </div>
-            <a
-              href={`/library/${doc.file}`}
-              download
-              className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-              style={{ background: `rgba(${ACCENT_RGB}, 0.08)`, border: `1px solid rgba(${ACCENT_RGB}, 0.3)`, color: ACCENT }}
-            >
-              Download
-            </a>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function formatTimestamp(ts: number) {
-  return new Date(ts).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function todayStr() {
-  return new Date().toISOString().split("T")[0];
-}
-
-const EMPTY_FORM = {
-  date: "",
-  equipmentId: "",
-  chillerName: "",
-  chilledWaterSupply: "",
-  chilledWaterReturn: "",
-  condenserWaterEntering: "",
-  condenserWaterLeaving: "",
-  refrigerantSuction: "",
-  refrigerantDischarge: "",
-  operatingKw: "",
-  hzSpeed: "",
-  gpm: "",
-  notes: "",
-  techName: "",
+const EMPTY = {
+  date: "", equipmentId: "", chillerName: "", chilledWaterSupply: "", chilledWaterReturn: "",
+  condenserWaterEntering: "", condenserWaterLeaving: "", refrigerantSuction: "",
+  refrigerantDischarge: "", operatingKw: "", hzSpeed: "", gpm: "", notes: "", techName: "",
 };
 
-const inputCls =
-  "bg-[hsl(200_30%_12%)] border border-[hsl(200_30%_22%)] text-[hsl(200_18%_84%)] rounded-lg px-3 py-2 w-full focus:border-[#38bdf8] focus:outline-none focus:ring-1 focus:ring-sky-400/50 placeholder-[hsl(200_15%_40%)] text-sm transition-all";
-
-const logFields = [
-  { label: "Date", name: "date", type: "date" },
-  { label: "Equipment ID", name: "equipmentId", type: "text", placeholder: "e.g. CHLLR-001" },
-  { label: "Chiller Name / Location", name: "chillerName", type: "text", placeholder: "e.g. Chiller Plant A" },
-  { label: "CHW Supply Temp (°F)", name: "chilledWaterSupply", type: "text", placeholder: "e.g. 44" },
-  { label: "CHW Return Temp (°F)", name: "chilledWaterReturn", type: "text", placeholder: "e.g. 54" },
-  { label: "CW Entering Temp (°F)", name: "condenserWaterEntering", type: "text", placeholder: "e.g. 85" },
-  { label: "CW Leaving Temp (°F)", name: "condenserWaterLeaving", type: "text", placeholder: "e.g. 95" },
-  { label: "Refrigerant Suction Temp (°F)", name: "refrigerantSuction", type: "text", placeholder: "e.g. 40" },
-  { label: "Refrigerant Discharge Temp (°F)", name: "refrigerantDischarge", type: "text", placeholder: "e.g. 110" },
-  { label: "Operating kW", name: "operatingKw", type: "text", placeholder: "e.g. 120" },
-  { label: "Hz / Speed (%)", name: "hzSpeed", type: "text", placeholder: "e.g. 60 Hz / 80%" },
-  { label: "GPM (Flow)", name: "gpm", type: "text", placeholder: "e.g. 450" },
-  { label: "Technician Name", name: "techName", type: "text", placeholder: "Full name" },
+const LOG_FIELDS = [
+  { label: "Date",                            name: "date",                   type: "date"                              },
+  { label: "Equipment ID",                    name: "equipmentId",            type: "text", placeholder: "e.g. CHLLR-001"    },
+  { label: "Chiller Name / Location",         name: "chillerName",            type: "text", placeholder: "e.g. Chiller Plant A" },
+  { label: "CHW Supply Temp (°F)",            name: "chilledWaterSupply",     type: "text", placeholder: "e.g. 44"             },
+  { label: "CHW Return Temp (°F)",            name: "chilledWaterReturn",     type: "text", placeholder: "e.g. 54"             },
+  { label: "CW Entering Temp (°F)",           name: "condenserWaterEntering", type: "text", placeholder: "e.g. 85"             },
+  { label: "CW Leaving Temp (°F)",            name: "condenserWaterLeaving",  type: "text", placeholder: "e.g. 95"             },
+  { label: "Refrigerant Suction Temp (°F)",   name: "refrigerantSuction",     type: "text", placeholder: "e.g. 40"             },
+  { label: "Refrigerant Discharge Temp (°F)", name: "refrigerantDischarge",   type: "text", placeholder: "e.g. 110"            },
+  { label: "Operating kW",                    name: "operatingKw",            type: "text", placeholder: "e.g. 120"            },
+  { label: "Hz / Speed (%)",                  name: "hzSpeed",                type: "text", placeholder: "e.g. 60 Hz / 80%"   },
+  { label: "GPM (Flow)",                      name: "gpm",                    type: "text", placeholder: "e.g. 450"            },
+  { label: "Technician Name",                 name: "techName",               type: "text", placeholder: "Full name"           },
 ];
 
 export default function ChillerPage() {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab]           = useState<Tab>("overview");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [newNote, setNewNote] = useState("");
-  const [form, setForm] = useState({ ...EMPTY_FORM, date: todayStr() });
+  const [notes, setNotes]       = useState<Note[]>([]);
+  const [newNote, setNewNote]   = useState("");
+  const [form, setForm]         = useState({ ...EMPTY, date: todayStr() });
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem("chiller_notes");
-        if (stored) setNotes(JSON.parse(stored));
-      } catch {}
-    }
+    try { const s = localStorage.getItem("chiller_notes"); if (s) setNotes(JSON.parse(s)); } catch {}
   }, []);
 
-  function saveNotes(updated: Note[]) {
-    setNotes(updated);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("chiller_notes", JSON.stringify(updated));
-    }
+  function saveNotes(n: Note[]) {
+    setNotes(n);
+    try { localStorage.setItem("chiller_notes", JSON.stringify(n)); } catch {}
   }
 
-  function handleFormChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
+    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await fetch(SHEET_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system: "chiller", ...form }),
-      });
+      await fetch(SHEET_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ system: "chiller", ...form }) });
     } catch {}
     setSubmitted(true);
-    setForm({ ...EMPTY_FORM, date: todayStr() });
+    setForm({ ...EMPTY, date: todayStr() });
     setSubmitting(false);
     setTimeout(() => setSubmitted(false), 6000);
   }
 
   function addNote() {
     if (!newNote.trim()) return;
-    const note: Note = { id: Date.now().toString(), text: newNote.trim(), timestamp: Date.now() };
-    saveNotes([note, ...notes]);
+    saveNotes([{ id: Date.now().toString(), text: newNote.trim(), timestamp: Date.now() }, ...notes]);
     setNewNote("");
-  }
-
-  function deleteNote(id: string) {
-    saveNotes(notes.filter((n) => n.id !== id));
   }
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* Page header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center"
-            style={{ background: `rgba(${ACCENT_RGB}, 0.1)`, border: `1px solid rgba(${ACCENT_RGB}, 0.3)` }}
-          >
-            <Snowflake size={20} style={{ color: ACCENT }} />
-          </div>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-[hsl(200_18%_84%)]">Chiller Intelligence</h1>
-              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-900/30 border border-green-700/50 text-green-400">
-                ● ACTIVE
-              </span>
-            </div>
-            <p className="text-sm text-[hsl(200_15%_55%)]">Chilled water · Condenser · Refrigerant · Cooling tower</p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        icon={Snowflake}
+        title="Chiller Intelligence"
+        sub="Chilled water · Condenser · Refrigerant · Cooling tower"
+        accent={ACCENT}
+        accentRgb={ACCENT_RGB}
+        badge="Active"
+        badgeVariant="success"
+      />
 
-      {/* Tab bar */}
-      <div
-        className="flex gap-1 mb-8 p-1 rounded-lg border border-[hsl(200_30%_18%)] w-fit flex-wrap"
-        style={{ background: "hsl(200 50% 8%)" }}
-      >
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              tab === t.id
-                ? "border"
-                : "text-[hsl(200_15%_55%)] hover:text-[hsl(200_18%_84%)]"
-            }`}
-            style={
-              tab === t.id
-                ? {
-                    background: `rgba(${ACCENT_RGB}, 0.12)`,
-                    borderColor: `rgba(${ACCENT_RGB}, 0.35)`,
-                    color: ACCENT,
-                  }
-                : {}
-            }
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} active={tab} onChange={setTab} accent={ACCENT} accentRgb={ACCENT_RGB} />
 
-      {/* Overview */}
+      {/* ── Overview ── */}
       {tab === "overview" && (
         <div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-            {[
-              { stat: "14 Documents", desc: "Optimization guides, logs & checklists" },
-              { stat: "Live Dashboard", desc: "Looker Studio embedded analytics" },
-              { stat: "Real-Time Logs", desc: "Temperature, kW, GPM tracking" },
-            ].map((card) => (
-              <div
-                key={card.stat}
-                className="p-5 rounded-xl border transition-all"
-                style={{ background: "hsl(200 50% 10%)", borderColor: `rgba(${ACCENT_RGB}, 0.2)` }}
-              >
-                <p className="text-xl font-bold mb-1" style={{ color: ACCENT }}>{card.stat}</p>
-                <p className="text-sm text-[hsl(200_15%_55%)]">{card.desc}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <StatCard label="Documents"      value="14"     sub="Optimization guides & checklists" icon={BarChart3}  accent={ACCENT} accentRgb={ACCENT_RGB} />
+            <StatCard label="CHW Supply"     value="44°F"   sub="Target supply temp"               icon={Thermometer} accent={ACCENT} accentRgb={ACCENT_RGB} />
+            <StatCard label="Operating kW"   value="120 kW" sub="Baseline efficiency target"       icon={Zap}        accent={ACCENT} accentRgb={ACCENT_RGB} />
+            <StatCard label="Flow Rate"      value="450 GPM" sub="Chilled water flow target"       icon={Droplets}   accent={ACCENT} accentRgb={ACCENT_RGB} />
           </div>
 
-          <h2 className="text-base font-semibold text-[hsl(200_18%_84%)] mb-4">Chiller Performance Dashboard</h2>
-          <div
-            className="rounded-xl overflow-hidden mb-3"
-            style={{ border: `1px solid rgba(${ACCENT_RGB}, 0.3)`, boxShadow: `0 0 20px rgba(${ACCENT_RGB}, 0.1)` }}
-          >
-            <iframe
-              src={LOOKER_URL}
-              width="100%"
-              height="600"
-              className="block"
-              allow="fullscreen"
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-              title="Chiller Looker Studio Dashboard"
-            />
-          </div>
-          <p className="text-xs text-[hsl(200_15%_45%)]">
-            Submit readings in the Log Data tab to update this dashboard.
-          </p>
+          <SectionHeader title="Chiller Performance Dashboard" sub="Submit readings in Log Data to update" accent={ACCENT} />
+          <Card className="overflow-hidden mb-2" accent={ACCENT}>
+            <iframe src={LOOKER_URL} width="100%" height="620" className="block"
+              allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+              title="Chiller Looker Studio Dashboard" />
+          </Card>
+          <p className="text-xs text-[hsl(200_15%_45%)] mb-6">Data updates within minutes of a log entry.</p>
         </div>
       )}
 
-      {/* Log Data */}
+      {/* ── Log Data ── */}
       {tab === "log-data" && (
-        <div>
-          <h2 className="text-base font-semibold text-[hsl(200_18%_84%)] mb-1">Log Chiller Data</h2>
-          <p className="text-sm text-[hsl(200_15%_55%)] mb-6">
-            Submit a reading to your Google Sheet. Data feeds directly into the Looker Studio dashboard.
-          </p>
+        <div className="max-w-2xl">
+          <SectionHeader title="Log Chiller Data" sub="Submit a reading to your Google Sheet — feeds directly into Looker Studio." accent={ACCENT} />
 
           {submitted && (
-            <div
-              className="mb-6 p-4 rounded-lg border flex items-center gap-3"
-              style={{ background: `rgba(${ACCENT_RGB}, 0.08)`, borderColor: `rgba(${ACCENT_RGB}, 0.4)`, color: ACCENT }}
-            >
+            <div className="mb-6 p-4 rounded-lg border flex items-center gap-3"
+              style={{ background: `rgba(${ACCENT_RGB}, 0.08)`, borderColor: `rgba(${ACCENT_RGB}, 0.4)`, color: ACCENT }}>
               <span className="text-lg">✓</span>
-              <span className="text-sm font-semibold">Entry logged — Looker Studio will update within minutes.</span>
+              <span className="text-sm font-semibold">Entry logged — dashboard updates within minutes.</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4 max-w-2xl">
-            {logFields.map((field) => (
-              <div key={field.name}>
-                <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">{field.label}</label>
-                <input
-                  type={field.type}
-                  name={field.name}
-                  value={form[field.name as keyof typeof form]}
-                  onChange={handleFormChange}
-                  placeholder={"placeholder" in field ? field.placeholder : undefined}
-                  className={inputCls}
-                />
-              </div>
-            ))}
-            <div>
-              <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">Notes</label>
-              <textarea
-                name="notes"
-                value={form.notes}
-                onChange={handleFormChange}
-                rows={3}
-                placeholder="Observations, anomalies, maintenance notes..."
-                className={`${inputCls} resize-none`}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="font-semibold px-6 py-2 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              style={{ background: ACCENT, color: "#001923" }}
-            >
-              {submitting ? "Submitting…" : "Submit Log Entry"}
-            </button>
-          </form>
+          <Card>
+            <CardContent className="pt-5">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {LOG_FIELDS.map((f) => (
+                  <div key={f.name}>
+                    <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">{f.label}</label>
+                    <input type={f.type} name={f.name} value={form[f.name as keyof typeof form]}
+                      onChange={handleChange} placeholder={"placeholder" in f ? f.placeholder : undefined}
+                      className={inputCls()} />
+                  </div>
+                ))}
+                <div>
+                  <label className="block text-xs font-medium text-[hsl(200_15%_55%)] mb-1">Notes</label>
+                  <textarea name="notes" value={form.notes} onChange={handleChange} rows={3}
+                    placeholder="Observations, anomalies, maintenance notes..."
+                    className={`${inputCls()} resize-none`} />
+                </div>
+                <button type="submit" disabled={submitting}
+                  className="font-semibold px-6 py-2.5 rounded-lg transition-all disabled:opacity-50 text-sm"
+                  style={{ background: ACCENT, color: "#001923" }}>
+                  {submitting ? "Submitting…" : "Submit Log Entry"}
+                </button>
+              </form>
+            </CardContent>
+          </Card>
         </div>
       )}
 
-      {/* Resources */}
+      {/* ── Resources ── */}
       {tab === "resources" && (
         <div>
-          <h2 className="text-base font-semibold text-[hsl(200_18%_84%)] mb-6">Chiller Resource Library</h2>
-          <DocSection title="Guide" docs={GUIDE_DOCS} />
-          <DocSection title="Logs & Checklists" docs={LOG_DOCS} />
-          <DocSection title="Extras" docs={EXTRA_DOCS} />
+          <SectionHeader title="Chiller Resource Library" sub="Guides, logs, and checklists" accent={ACCENT} />
+          {[["Guide", GUIDE], ["Logs & Checklists", LOGS], ["Additional Resources", EXTRA]].map(([title, docs]) =>
+            (docs as typeof GUIDE).length === 0 ? null : (
+              <div key={title as string} className="mb-8">
+                <p className="text-xs font-semibold text-[hsl(200_15%_50%)] uppercase tracking-widest mb-3">{title as string}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(docs as typeof GUIDE).map((doc) => (
+                    <DocCard key={doc.file} label={doc.label} file={doc.file} type={doc.type} accent={ACCENT} accentRgb={ACCENT_RGB} />
+                  ))}
+                </div>
+              </div>
+            )
+          )}
         </div>
       )}
 
-      {/* Notes */}
+      {/* ── Notes ── */}
       {tab === "notes" && (
-        <div>
-          <h2 className="text-base font-semibold text-[hsl(200_18%_84%)] mb-1">Chiller Notes</h2>
-          <p className="text-sm text-[hsl(200_15%_55%)] mb-6">Private notes stored in your browser.</p>
-          <div className="mb-6 max-w-2xl">
-            <textarea
-              value={newNote}
-              onChange={(e) => setNewNote(e.target.value)}
-              rows={4}
-              placeholder="Add a note about this chiller system..."
-              className={`${inputCls} resize-none mb-3`}
-            />
-            <button
-              onClick={addNote}
-              className="font-semibold px-5 py-2 rounded-lg transition-all text-sm"
-              style={{ background: ACCENT, color: "#001923" }}
-            >
-              Save Note
-            </button>
-          </div>
+        <div className="max-w-2xl">
+          <SectionHeader title="Chiller Notes" sub="Private notes stored in your browser" accent={ACCENT} />
+          <Card className="mb-6">
+            <CardContent className="pt-5 space-y-3">
+              <textarea value={newNote} onChange={(e) => setNewNote(e.target.value)} rows={4}
+                placeholder="Add a note about this chiller system..."
+                className={`${inputCls()} resize-none`} />
+              <button onClick={addNote}
+                className="font-semibold px-5 py-2 rounded-lg transition-all text-sm"
+                style={{ background: ACCENT, color: "#001923" }}>
+                Save Note
+              </button>
+            </CardContent>
+          </Card>
 
-          <div className="space-y-3 max-w-2xl mb-10">
+          <div className="space-y-3 mb-6">
             {notes.length === 0 && (
-              <p className="text-sm text-[hsl(200_15%_45%)]">No notes yet. Add your first observation.</p>
+              <p className="text-sm text-[hsl(200_15%_45%)]">No notes yet. Add your first observation above.</p>
             )}
-            {notes.map((note) => (
-              <div
-                key={note.id}
-                className="p-4 rounded-lg border border-[hsl(200_30%_18%)]"
-                style={{ background: "hsl(200 50% 8%)" }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs text-[hsl(200_15%_45%)] mb-1">{formatTimestamp(note.timestamp)}</p>
-                    <p className="text-sm text-[hsl(200_18%_84%)] whitespace-pre-wrap">{note.text}</p>
+            {notes.map((n) => (
+              <Card key={n.id}>
+                <CardContent className="pt-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] text-[hsl(200_15%_45%)] mb-1">{fmt(n.timestamp)}</p>
+                      <p className="text-sm text-[hsl(200_18%_84%)] whitespace-pre-wrap">{n.text}</p>
+                    </div>
+                    <button onClick={() => saveNotes(notes.filter((x) => x.id !== n.id))}
+                      className="shrink-0 text-red-500/60 hover:text-red-400 transition-colors text-xs">
+                      Delete
+                    </button>
                   </div>
-                  <button
-                    onClick={() => deleteNote(note.id)}
-                    className="shrink-0 text-red-500/60 hover:text-red-400 transition-colors text-xs"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
 
-          <div
-            className="max-w-2xl p-5 rounded-xl border"
-            style={{ background: "hsl(200 50% 8%)", borderColor: `rgba(${ACCENT_RGB}, 0.2)` }}
-          >
-            <p className="text-sm text-[hsl(200_15%_55%)] mb-3">
-              Upgrade to FI Platform for team notes, API sync, and full diagnostic history.
-            </p>
-            <Link
-              href="/pricing"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
-              style={{ background: `rgba(${ACCENT_RGB}, 0.1)`, border: `1px solid rgba(${ACCENT_RGB}, 0.35)`, color: ACCENT }}
-            >
-              Upgrade to FI Platform →
-            </Link>
-          </div>
+          <UpgradeBanner accent={ACCENT} accentRgb={ACCENT_RGB} />
         </div>
       )}
     </div>
