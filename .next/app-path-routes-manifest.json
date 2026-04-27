@@ -1,10 +1,10 @@
 {
   "/_not-found/page": "/_not-found",
-  "/pricing/page": "/pricing",
-  "/virtuous/page": "/virtuous",
-  "/facility/page": "/facility",
-  "/chiller/page": "/chiller",
-  "/compliance/page": "/compliance",
   "/boiler/page": "/boiler",
-  "/page": "/"
+  "/virtuous/page": "/virtuous",
+  "/page": "/",
+  "/compliance/page": "/compliance",
+  "/chiller/page": "/chiller",
+  "/facility/page": "/facility",
+  "/pricing/page": "/pricing"
 }

@@ -7,7 +7,7 @@ import { CHILLER_INTELLIGENCE } from "@/app/lib/products";
 import type { LibraryDocument } from "@/app/lib/products";
 
 const SHEET_URL =
-  "https://script.google.com/macros/s/AKfycbwPaDRoieGEY-6WOrVzUX1JsQlHqIIV2SExc4binnXaqtdvzd4sv5XSw4KIOLkLIkcH/exec";
+  "https://script.google.com/macros/s/AKfycbxmbYPEuVIRL_pb2BJxcjnli5UYyUe0M2kI6NedHk9bBu3FuYhex1lAuDYv1psACGL9/exec";
 
 const LOOKER_URL =
   "https://datastudio.google.com/embed/reporting/29067deb-fc12-4d99-a2a3-47291d3b2019/page/4Z2aF";

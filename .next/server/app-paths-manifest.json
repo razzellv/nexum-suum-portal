@@ -1,10 +1,10 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
-  "/pricing/page": "app/pricing/page.js",
-  "/virtuous/page": "app/virtuous/page.js",
-  "/facility/page": "app/facility/page.js",
-  "/chiller/page": "app/chiller/page.js",
-  "/compliance/page": "app/compliance/page.js",
   "/boiler/page": "app/boiler/page.js",
-  "/page": "app/page.js"
+  "/virtuous/page": "app/virtuous/page.js",
+  "/page": "app/page.js",
+  "/compliance/page": "app/compliance/page.js",
+  "/chiller/page": "app/chiller/page.js",
+  "/facility/page": "app/facility/page.js",
+  "/pricing/page": "app/pricing/page.js"
 }
