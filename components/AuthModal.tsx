@@ -34,11 +34,19 @@ export default function AuthModal({ onClose }: Props) {
     if (!name || !email || !company) { setError("All fields are required."); return; }
     setError("");
     setSubmitting(true);
-    const user: FILiteUser = { email: email.trim().toLowerCase(), name, company, tier, registeredAt: new Date().toISOString() };
-    await registerUser(user);
-    setUser(user);
-    setSubmitting(false);
-    onClose();
+    try {
+      const res = await fetch("/.netlify/functions/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), company: company.trim(), tier }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) throw new Error(data.error || "Could not start checkout");
+      window.location.href = data.url;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      setSubmitting(false);
+    }
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -124,10 +132,10 @@ export default function AuthModal({ onClose }: Props) {
             <button type="submit" disabled={submitting}
               className="w-full py-2.5 rounded-xl font-bold text-sm transition-all mt-2"
               style={{ background: "#00FFE1", color: "#001923", opacity: submitting ? 0.7 : 1 }}>
-              {submitting ? "Registering…" : "Access FI Lite →"}
+              {submitting ? "Redirecting to checkout…" : "Continue to Payment →"}
             </button>
             <p className="text-[11px] text-gray-600 text-center">
-              By registering, Nexum Suum will follow up to confirm your access and discuss full platform options.
+              Secure checkout via Stripe. Access is granted immediately after payment.
             </p>
           </form>
         ) : (
