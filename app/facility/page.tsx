@@ -9,6 +9,7 @@ import { submitLog, loadLogs, FacilityLog } from "../lib/logData";
 import { PRODUCTS } from "../lib/products";
 import BoilerCalculator from "../../components/BoilerCalculator";
 import ChillerCalculator from "../../components/ChillerCalculator";
+import ProbabilityFeed from "../../components/ProbabilityFeed";
 
 const ACCENT = "#fbbf24";
 const ACCENT_RGB = "251,191,36";
@@ -25,7 +26,7 @@ const SYSTEMS = [
   { id: "FAC-FW",  name: "Feedwater / DA / Tanks",  docs: 3,  desc: "DA, expansion tank, dump tank SOPs",               tags: ["feedwater"] },
 ];
 
-const TABS = ["Overview", "Log Data", "Calculators", "Resources"] as const;
+const TABS = ["Overview", "Log Data", "Diagnostics", "Calculators", "Resources"] as const;
 type Tab = typeof TABS[number];
 
 const EMPTY: FacilityLog = {
@@ -334,6 +335,11 @@ export default function FacilityPage() {
               )}
             </div>
           </div>
+        )}
+
+        {/* DIAGNOSTICS */}
+        {tab === "Diagnostics" && (
+          <ProbabilityFeed userName={user.name} />
         )}
 
         {/* CALCULATORS */}
