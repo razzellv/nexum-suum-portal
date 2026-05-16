@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { useAuth } from "./AuthContext";
-import { Tier, FILiteUser, registerUser, loadUser, TIER_LABELS } from "../app/lib/auth";
+import { Tier, FILiteUser, loadUser, TIER_LABELS } from "../app/lib/auth";
 
 interface Props {
   onClose: () => void;

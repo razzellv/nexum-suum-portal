@@ -10,6 +10,7 @@ import { PRODUCTS } from "../lib/products";
 import BoilerCalculator from "../../components/BoilerCalculator";
 import ChillerCalculator from "../../components/ChillerCalculator";
 import ProbabilityFeed from "../../components/ProbabilityFeed";
+import VirtuousBoard from "../../components/VirtuousBoard";
 
 const ACCENT = "#fbbf24";
 const ACCENT_RGB = "251,191,36";
@@ -190,6 +191,9 @@ export default function FacilityPage() {
                   </button>
                 </div>
               ))}
+            </div>
+            <div className="mt-6">
+              <VirtuousBoard userName={user?.name || "Technician"} />
             </div>
           </>
         )}
