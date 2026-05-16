@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutGrid, Flame, Snowflake, Building2,
   ChevronLeft, ChevronRight, BookOpen, ClipboardList, Zap, LogOut,
+  Database, Droplets, Users, Package,
 } from "lucide-react";
 import { useAuth } from "./AuthContext";
 
@@ -12,6 +13,10 @@ const NAV = [
   { label: "Boiler Intelligence",   icon: Flame,         href: "/boiler"     },
   { label: "Chiller Intelligence",  icon: Snowflake,     href: "/chiller"    },
   { label: "Facility Intelligence", icon: Building2,     href: "/facility"   },
+  { label: "Assets",                icon: Database,      href: "/assets"     },
+  { label: "Blowdowns",             icon: Droplets,      href: "/blowdowns"  },
+  { label: "Employees",             icon: Users,         href: "/employees"  },
+  { label: "Inventory",             icon: Package,       href: "/inventory"  },
   { label: "Document Library",      icon: BookOpen,      href: "/library"    },
   { label: "Compliance",            icon: ClipboardList, href: "/compliance" },
 ];

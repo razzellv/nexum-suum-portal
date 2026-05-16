@@ -9,8 +9,7 @@ export interface FILiteUser {
 }
 
 const STORAGE_KEY = 'fi_lite_user';
-
-const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxmbYPEuVIRL_pb2BJxcjnli5UYyUe0M2kI6NedHk9bBu3FuYhex1lAuDYv1psACGL9/exec';
+const TOKEN_KEY = 'fi_lite_token';
 
 export function saveUser(user: FILiteUser): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
@@ -27,27 +26,15 @@ export function loadUser(): FILiteUser | null {
 
 export function clearUser(): void {
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(TOKEN_KEY);
 }
 
-export async function registerUser(user: FILiteUser): Promise<void> {
-  saveUser(user);
-  try {
-    // Sends to "Prospect Buyers" tab via GAS
-    await fetch(GAS_ENDPOINT, {
-      method: 'POST',
-      body: JSON.stringify({
-        system: 'buyer',
-        name: user.name,
-        company: user.company,
-        email: user.email,
-        product: `FI Lite — ${user.tier.charAt(0).toUpperCase() + user.tier.slice(1)} Tier`,
-        status: 'FI Lite Registration',
-        notes: `Registered ${new Date().toISOString()}`,
-      }),
-    });
-  } catch {
-    // Silently fail — user is stored locally regardless
-  }
+export function saveToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function loadToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
 }
 
 export function canAccessTier(userTier: Tier, requiredTier: Tier): boolean {

@@ -1,6 +1,8 @@
+import { apiPost } from './api';
+
 export type LogType = 'boiler' | 'chiller' | 'facility';
 
-// Matches GAS buildRow fields exactly
+// Log fields
 export interface BoilerLog {
   timestamp: string;
   date: string;
@@ -46,8 +48,6 @@ export interface FacilityLog {
   notes: string;
 }
 
-const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxmbYPEuVIRL_pb2BJxcjnli5UYyUe0M2kI6NedHk9bBu3FuYhex1lAuDYv1psACGL9/exec';
-
 const PREFIX = 'fi_lite_logs_';
 
 export function saveLogs(type: LogType, logs: unknown[]): void {
@@ -68,11 +68,8 @@ export async function submitLog(type: LogType, entry: Record<string, string>): P
   const updated = [entry, ...existing].slice(0, 100);
   saveLogs(type, updated);
   try {
-    await fetch(GAS_ENDPOINT, {
-      method: 'POST',
-      body: JSON.stringify({ system: type, ...entry }),
-    });
+    await apiPost(`/logs/${type}`, entry);
   } catch {
-    // Silently fail — entry is saved locally
+    // Offline — entry is saved locally above
   }
 }

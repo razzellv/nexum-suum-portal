@@ -7,10 +7,10 @@ import { useAuth } from "../components/AuthContext";
 import AuthModal from "../components/AuthModal";
 
 const STAT_TILES = [
-  { label: "Packages",        value: "3",    icon: BarChart3,   accent: "#00FFE1" },
-  { label: "Total Documents", value: "170+", icon: FileText,    accent: "#38bdf8" },
-  { label: "Compliance Docs", value: "8",    icon: CheckSquare, accent: "#fbbf24" },
-  { label: "Live Analytics",  value: "On",   icon: TrendingUp,  accent: "#34d399" },
+  { label: "Packages",       value: "3",             icon: BarChart3,   accent: "#00FFE1" },
+  { label: "Assets Tracked", value: "Live",           icon: FileText,    accent: "#38bdf8" },
+  { label: "Compliance",     value: "VirtuousBoard™", icon: CheckSquare, accent: "#fbbf24" },
+  { label: "Analytics",      value: "On",             icon: TrendingUp,  accent: "#34d399" },
 ];
 
 const PACKAGES = [
@@ -21,7 +21,7 @@ const PACKAGES = [
 
 const STEPS = [
   { num: "01", title: "Register & Select Tier", desc: "Sign up with your facility info and choose Boiler, Chiller, or Facility tier." },
-  { num: "02", title: "Log Your Readings",       desc: "Submit equipment data — readings are saved locally and synced to Nexum Suum." },
+  { num: "02", title: "Log Your Readings",       desc: "Submit equipment data — readings are stored locally and synced to the AWS-powered backend." },
   { num: "03", title: "Analyze & Download",      desc: "View built-in charts, run efficiency calculators, download SOPs and checklists." },
 ];
 
