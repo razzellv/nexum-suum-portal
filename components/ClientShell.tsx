@@ -3,22 +3,21 @@ import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutGrid, Flame, Snowflake, Building2,
-  ChevronLeft, ChevronRight, BookOpen, ClipboardList, Zap, LogOut,
+  ChevronLeft, ChevronRight, BookOpen, Zap, LogOut,
   Database, Droplets, Users, Package,
 } from "lucide-react";
 import { useAuth } from "./AuthContext";
 
 const NAV = [
-  { label: "Overview",              icon: LayoutGrid,    href: "/"           },
-  { label: "Boiler Intelligence",   icon: Flame,         href: "/boiler"     },
-  { label: "Chiller Intelligence",  icon: Snowflake,     href: "/chiller"    },
-  { label: "Facility Intelligence", icon: Building2,     href: "/facility"   },
-  { label: "Assets",                icon: Database,      href: "/assets"     },
-  { label: "Blowdowns",             icon: Droplets,      href: "/blowdowns"  },
-  { label: "Employees",             icon: Users,         href: "/employees"  },
-  { label: "Inventory",             icon: Package,       href: "/inventory"  },
-  { label: "Document Library",      icon: BookOpen,      href: "/library"    },
-  { label: "Compliance",            icon: ClipboardList, href: "/compliance" },
+  { label: "Overview",              icon: LayoutGrid,  href: "/"          },
+  { label: "Boiler Intelligence",   icon: Flame,       href: "/boiler"    },
+  { label: "Chiller Intelligence",  icon: Snowflake,   href: "/chiller"   },
+  { label: "Facility Intelligence", icon: Building2,   href: "/facility"  },
+  { label: "Assets",                icon: Database,    href: "/assets"    },
+  { label: "Blowdowns",             icon: Droplets,    href: "/blowdowns" },
+  { label: "Employees",             icon: Users,       href: "/employees" },
+  { label: "Inventory",             icon: Package,     href: "/inventory" },
+  { label: "Document Library",      icon: BookOpen,    href: "/library"   },
 ];
 
 export default function ClientShell({ children }: { children: React.ReactNode }) {
@@ -43,7 +42,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
           </div>
           {!collapsed && (
             <div className="leading-tight min-w-0">
-              <p className="text-white font-bold text-sm truncate">Nexum Suum</p>
+              <p className="font-display text-white font-bold text-sm truncate">Nexum Suum</p>
               <p className="text-[10px] tracking-wide" style={{ color: "rgba(0,255,225,0.45)" }}>Intelligence Portal</p>
             </div>
           )}
@@ -65,6 +64,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
                 className={`flex items-center gap-2.5 w-full rounded-xl px-2.5 py-2.5 text-[13px] font-medium transition-all duration-150 ${collapsed ? "justify-center" : ""}`}
                 style={active ? {
                   background: "rgba(0,255,225,0.08)", border: "1px solid rgba(0,255,225,0.16)", color: "#00FFE1",
+                  boxShadow: '0 0 12px rgba(0,255,225,0.08)',
                 } : { border: "1px solid transparent", color: "rgba(148,163,184,0.5)" }}
                 onMouseEnter={(e) => { if (!active) { const b = e.currentTarget; b.style.color = "#00FFE1"; b.style.background = "rgba(0,255,225,0.04)"; } }}
                 onMouseLeave={(e) => { if (!active) { const b = e.currentTarget; b.style.color = "rgba(148,163,184,0.5)"; b.style.background = "transparent"; } }}

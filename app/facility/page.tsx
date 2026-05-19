@@ -1,146 +1,285 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from "recharts";
+import { useState, useEffect, useMemo } from "react";
+import { Building2, Plus } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useAuth } from "../../components/AuthContext";
-import { submitLog, loadLogs, FacilityLog } from "../lib/logData";
-import { PRODUCTS } from "../lib/products";
-import BoilerCalculator from "../../components/BoilerCalculator";
-import ChillerCalculator from "../../components/ChillerCalculator";
+import { loadLogs, saveLogs } from "../lib/logData";
+import { FACILITY_INTELLIGENCE } from "../lib/products";
 import ProbabilityFeed from "../../components/ProbabilityFeed";
-import VirtuousBoard from "../../components/VirtuousBoard";
 
-const ACCENT = "#fbbf24";
-const ACCENT_RGB = "251,191,36";
+const GLASS = {
+  background: 'rgba(2,10,18,0.75)',
+  backdropFilter: 'blur(12px)',
+  WebkitBackdropFilter: 'blur(12px)',
+  border: '1px solid rgba(0,255,225,0.1)',
+  borderRadius: '16px',
+} as React.CSSProperties;
 
-const SYSTEMS = [
-  { id: "FAC-BLR", name: "Boiler Systems",         docs: 9,  desc: "Combustion, safety, log sheets, SOPs",            tags: ["combustion", "safety"] },
-  { id: "FAC-CHL", name: "Chiller Systems",         docs: 7,  desc: "Cooling tower, refrigerant, log sheets",           tags: ["refrigerant", "cooling"] },
-  { id: "FAC-PMP", name: "Pump Systems",            docs: 3,  desc: "Circulator, condensate, feedwater pumps",          tags: ["hydronic"] },
-  { id: "FAC-AHU", name: "AHU & Ventilation",       docs: 2,  desc: "Air handling, VAV, exhaust systems",               tags: ["ventilation"] },
-  { id: "FAC-CTS", name: "Cooling Tower Systems",   docs: 4,  desc: "Water treatment, blowdown, inspection",            tags: ["water", "cooling"] },
-  { id: "FAC-WTR", name: "Water Treatment",         docs: 2,  desc: "Chemistry, softener, biocide programs",            tags: ["chemistry"] },
-  { id: "FAC-ELC", name: "Electrical & Controls",   docs: 2,  desc: "Panel inspection, safety lockout procedures",      tags: ["controls"] },
-  { id: "FAC-AIR", name: "Air Compressor & Dryer",  docs: 2,  desc: "Compressor ops, dryer maintenance",                tags: ["compressed air"] },
-  { id: "FAC-FW",  name: "Feedwater / DA / Tanks",  docs: 3,  desc: "DA, expansion tank, dump tank SOPs",               tags: ["feedwater"] },
-];
+const GLASS_TILE = {
+  background: 'rgba(4,16,28,0.85)',
+  backdropFilter: 'blur(16px)',
+  WebkitBackdropFilter: 'blur(16px)',
+  border: '1px solid rgba(0,255,225,0.1)',
+  borderRadius: '12px',
+} as React.CSSProperties;
 
-const TABS = ["Overview", "Log Data", "Diagnostics", "Calculators", "Resources"] as const;
+const INPUT_STYLE: React.CSSProperties = {
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(0,255,225,0.1)',
+  borderRadius: '8px',
+  color: '#e2e8f0',
+  width: '100%',
+  padding: '8px 12px',
+  fontSize: '13px',
+  outline: 'none',
+};
+
+const LABEL_STYLE: React.CSSProperties = {
+  display: 'block',
+  fontSize: '10px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.1em',
+  color: 'rgba(148,163,184,0.5)',
+  marginBottom: '4px',
+};
+
+interface BoilerLog {
+  id: string;
+  employeeName: string;
+  title: string;
+  description: string;
+  dateTime: string;
+  supplyTemp: string;
+  returnTemp: string;
+  supplyPSI: string;
+  returnPSI: string;
+  mainPSI: string;
+  waterLevel: string;
+  conductivityPPM: string;
+  pH: string;
+  oilVolume: string;
+  timestamp: number;
+}
+
+interface ChillerLog {
+  id: string;
+  employeeName: string;
+  title: string;
+  description: string;
+  dateTime: string;
+  cwSupplyTemp: string;
+  cwReturnTemp: string;
+  condSupplyTemp: string;
+  condReturnTemp: string;
+  supplyPSI: string;
+  returnPSI: string;
+  refSuctionTemp: string;
+  refDischargeTemp: string;
+  basinLevel: string;
+  hardness: string;
+  oilVolume: string;
+  timestamp: number;
+}
+
+interface VirtuousEntry {
+  id: string;
+  inspectionType: string;
+  finding: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  status: 'open' | 'in-progress' | 'resolved';
+  timestamp: number;
+}
+
+const TABS = ['Overview', 'VirtuousBoard', 'Diagnostics', 'Resources'] as const;
 type Tab = typeof TABS[number];
 
-const EMPTY: FacilityLog = {
-  timestamp: "", date: "", systemType: "", equipmentId: "",
-  location: "", readingValue: "", unit: "", status: "Normal",
-  techName: "", notes: "",
-};
+function getWeekRange() {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const mon = new Date(now);
+  mon.setHours(0, 0, 0, 0);
+  mon.setDate(now.getDate() + diff);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  sun.setHours(23, 59, 59, 999);
+  return { start: mon.getTime(), end: sun.getTime() };
+}
+
+function numAvg(logs: { [key: string]: string | number }[], key: string): number {
+  const vals = logs.map(l => parseFloat(l[key] as string)).filter(v => !isNaN(v) && v > 0);
+  if (!vals.length) return 0;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+function fmtAvg(val: number): string {
+  return val > 0 ? val.toFixed(1) : '—';
+}
+
+function colorDrift(diff: number): string {
+  const abs = Math.abs(diff);
+  if (abs <= 1) return '#22c55e';
+  if (abs <= 3) return '#f59e0b';
+  return '#ef4444';
+}
 
 export default function FacilityPage() {
   const { user } = useAuth();
-  const router = useRouter();
-  const [tab, setTab] = useState<Tab>("Overview");
-  const [search, setSearch] = useState("");
-  const now = new Date();
-  const [form, setForm] = useState<FacilityLog>({
-    ...EMPTY,
-    timestamp: now.toISOString().slice(0, 16),
-    date: now.toISOString().slice(0, 10),
-  });
-  const [logs, setLogs] = useState<FacilityLog[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [tab, setTab] = useState<Tab>('Overview');
+  const [boilerLogs, setBoilerLogs] = useState<BoilerLog[]>([]);
+  const [chillerLogs, setChillerLogs] = useState<ChillerLog[]>([]);
+  const [virtEntries, setVirtEntries] = useState<VirtuousEntry[]>([]);
 
-  useEffect(() => { setLogs(loadLogs<FacilityLog>("facility")); }, []);
+  // Drift analyzer state
+  const [oat, setOat] = useState('');
+  const [boilerSupplyTarget, setBoilerSupplyTarget] = useState('180');
+  const [boilerReturnTarget, setBoilerReturnTarget] = useState('160');
+  const [chillerSupplyTarget, setChillerSupplyTarget] = useState('44');
+  const [chillerReturnTarget, setChillerReturnTarget] = useState('54');
 
-  const canAccess = user && user.tier === "facility";
+  // Weekly compliance state
+  const [logThreshold] = useState(5);
+
+  // VirtuousBoard form
+  const [vForm, setVForm] = useState({ inspectionType: 'Boiler Log', finding: '', severity: 'low', status: 'open' });
+  const [vSubmitting, setVSubmitting] = useState(false);
+
+  useEffect(() => {
+    setBoilerLogs(loadLogs<BoilerLog>('boiler'));
+    setChillerLogs(loadLogs<ChillerLog>('chiller'));
+    try {
+      const raw = localStorage.getItem('fi_virtuous');
+      if (raw) setVirtEntries(JSON.parse(raw));
+    } catch { /* ignore */ }
+  }, []);
+
+  const { start: weekStart, end: weekEnd } = getWeekRange();
+
+  // Boiler averages
+  const bAvgCondPPM = fmtAvg(numAvg(boilerLogs as unknown as { [key: string]: string | number }[], 'conductivityPPM'));
+  const bAvgWaterLevel = fmtAvg(numAvg(boilerLogs as unknown as { [key: string]: string | number }[], 'waterLevel'));
+  const bAvgDelta = useMemo(() => {
+    const vals = boilerLogs.map(l => parseFloat(l.supplyTemp) - parseFloat(l.returnTemp)).filter(v => !isNaN(v));
+    if (!vals.length) return '—';
+    return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+  }, [boilerLogs]);
+  const bLogsWeek = boilerLogs.filter(l => l.timestamp >= weekStart && l.timestamp <= weekEnd).length;
+
+  // Chiller averages
+  const cAvgCWDelta = useMemo(() => {
+    const vals = chillerLogs.map(l => parseFloat(l.cwReturnTemp) - parseFloat(l.cwSupplyTemp)).filter(v => !isNaN(v));
+    if (!vals.length) return '—';
+    return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+  }, [chillerLogs]);
+  const cAvgCondDelta = useMemo(() => {
+    const vals = chillerLogs.map(l => parseFloat(l.condReturnTemp) - parseFloat(l.condSupplyTemp)).filter(v => !isNaN(v));
+    if (!vals.length) return '—';
+    return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+  }, [chillerLogs]);
+  const cAvgBasin = fmtAvg(numAvg(chillerLogs as unknown as { [key: string]: string | number }[], 'basinLevel'));
+  const cLogsWeek = chillerLogs.filter(l => l.timestamp >= weekStart && l.timestamp <= weekEnd).length;
+
+  // Chart data
+  const boilerChartData = useMemo(() => {
+    return [...boilerLogs].reverse().slice(0, 20).map(l => ({
+      name: l.dateTime ? l.dateTime.slice(0, 10) : '—',
+      conductivity: parseFloat(l.conductivityPPM) || null,
+    }));
+  }, [boilerLogs]);
+
+  const chillerChartData = useMemo(() => {
+    return [...chillerLogs].reverse().slice(0, 20).map(l => ({
+      name: l.dateTime ? l.dateTime.slice(0, 10) : '—',
+      cwDelta: (parseFloat(l.cwReturnTemp) - parseFloat(l.cwSupplyTemp)) || null,
+    }));
+  }, [chillerLogs]);
+
+  // Drift analyzer
+  const lastBoiler = boilerLogs[0];
+  const lastChiller = chillerLogs[0];
+
+  const actualBoilerDelta = lastBoiler ? parseFloat(lastBoiler.supplyTemp) - parseFloat(lastBoiler.returnTemp) : null;
+  const targetBoilerDelta = parseFloat(boilerSupplyTarget) - parseFloat(boilerReturnTarget);
+  const actualChillerCWDelta = lastChiller ? parseFloat(lastChiller.cwReturnTemp) - parseFloat(lastChiller.cwSupplyTemp) : null;
+  const targetChillerDelta = parseFloat(chillerReturnTarget) - parseFloat(chillerSupplyTarget);
+  const actualCondDelta = lastChiller ? parseFloat(lastChiller.condReturnTemp) - parseFloat(lastChiller.condSupplyTemp) : null;
+
+  // Weekly compliance
+  const boilerLogsWeek = boilerLogs.filter(l => l.timestamp >= weekStart && l.timestamp <= weekEnd);
+  const chillerLogsWeek = chillerLogs.filter(l => l.timestamp >= weekStart && l.timestamp <= weekEnd);
+  const allLogsWeek = [...boilerLogsWeek, ...chillerLogsWeek];
+
+  const pmCount = allLogsWeek.filter(l =>
+    /pm|preventive|maintenance/i.test((l as { description: string }).description || '')
+  ).length;
+
+  const lastBoilerCond = lastBoiler ? parseFloat(lastBoiler.conductivityPPM) : null;
+  const lastBoilerPH = lastBoiler ? parseFloat(lastBoiler.pH) : null;
+  const lastChillerHardness = lastChiller ? parseFloat((lastChiller as { hardness: string }).hardness || '0') : null;
+
+  const openItems = allLogsWeek.filter(l =>
+    /drift|critical|high|low|flag/i.test((l as { description: string }).description || '')
+  ).length;
+
+  const oatVal = parseFloat(oat);
+  const oatEstimate = !isNaN(oatVal) ? (Math.abs(oatVal - 65) * 0.1).toFixed(1) : null;
+
+  async function handleVirtuousSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setVSubmitting(true);
+    const entry: VirtuousEntry = {
+      id: crypto.randomUUID(),
+      inspectionType: vForm.inspectionType,
+      finding: vForm.finding,
+      severity: vForm.severity as VirtuousEntry['severity'],
+      status: vForm.status as VirtuousEntry['status'],
+      timestamp: Date.now(),
+    };
+    const updated = [entry, ...virtEntries];
+    setVirtEntries(updated);
+    localStorage.setItem('fi_virtuous', JSON.stringify(updated));
+    setVForm({ inspectionType: 'Boiler Log', finding: '', severity: 'low', status: 'open' });
+    setVSubmitting(false);
+  }
+
+  const canAccess = user && user.tier === 'facility';
 
   if (!user) return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
       <p className="text-gray-500 mb-4 text-sm">Sign in to access Facility Intelligence.</p>
-      <button onClick={() => router.push("/")} className="px-4 py-2 rounded-xl text-sm font-semibold"
-        style={{ background: `rgba(${ACCENT_RGB},0.08)`, border: `1px solid rgba(${ACCENT_RGB},0.25)`, color: ACCENT }}>
-        ← Back to Overview
-      </button>
     </div>
   );
-
   if (!canAccess) return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
       <p className="text-gray-500 mb-2 text-sm">Facility Intelligence requires the Facility tier.</p>
-      <p className="text-gray-700 text-xs mb-4">Your tier: <span style={{ color: ACCENT }}>{user.tier}</span></p>
       <a href="https://nexumsuum-facilityintelligence.com/pricing" target="_blank" rel="noreferrer"
-        className="px-4 py-2 rounded-xl text-sm font-bold" style={{ background: ACCENT, color: "#001923" }}>
-        Upgrade to Facility Tier →
-      </a>
+        className="px-4 py-2 rounded-xl text-sm font-bold mt-3" style={{ background: '#fbbf24', color: '#001923' }}>Upgrade to Facility Tier →</a>
     </div>
   );
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    await submitLog("facility", { ...form, techName: form.techName || user.name });
-    const updated = loadLogs<FacilityLog>("facility");
-    setLogs(updated);
-    const n = new Date();
-    setForm({ ...EMPTY, timestamp: n.toISOString().slice(0, 16), date: n.toISOString().slice(0, 10) });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
-    setSubmitting(false);
-  };
-
-  const setF = (k: keyof FacilityLog, v: string) => setForm((f) => ({ ...f, [k]: v }));
-
-  const chartData = [...logs].reverse().slice(-20).map((l, i) => ({
-    name: l.date || `#${i + 1}`,
-    Reading: parseFloat(l.readingValue) || 0,
-  }));
-
-  const last = logs[0];
-  const filtered = SYSTEMS.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase()) || s.id.toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
-    <div style={{ background: "#030d14", minHeight: "100%" }}>
+    <div style={{ background: '#030d14', minHeight: '100%', position: 'relative', zIndex: 1 }}>
       {/* Header */}
-      <div className="px-7 pt-7 pb-5 border-b" style={{ borderColor: `rgba(${ACCENT_RGB},0.06)` }}>
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
-            style={{ background: `rgba(${ACCENT_RGB},0.08)`, border: `1px solid rgba(${ACCENT_RGB},0.18)` }}>🏢</div>
-          <div>
-            <h1 className="text-xl font-bold" style={{ color: ACCENT }}>Facility Intelligence</h1>
-            <p className="text-gray-600 text-xs">9 Systems · SOPs · Calculators · Compliance</p>
+      <div className="px-7 pt-7 pb-5 border-b" style={{ borderColor: 'rgba(251,191,36,0.06)' }}>
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.18)' }}>
+            <Building2 size={18} style={{ color: '#fbbf24' }} />
           </div>
-        </div>
-
-        {/* Stat tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: "System",    val: last?.systemType   },
-            { label: "Reading",   val: last?.readingValue ? `${last.readingValue} ${last.unit}` : undefined },
-            { label: "Location",  val: last?.location     },
-            { label: "Status",    val: last?.status       },
-          ].map((t) => (
-            <div key={t.label} className="rounded-xl p-4"
-              style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
-              <p className="text-[10px] uppercase tracking-wide text-gray-600 mb-1">{t.label}</p>
-              <p className="text-xl font-bold truncate" style={{ color: ACCENT }}>{t.val || "—"}</p>
-              <p className="text-[10px] text-gray-700 mt-0.5">{logs.length > 0 ? "last reading" : "no data yet"}</p>
-            </div>
-          ))}
+          <div>
+            <h1 className="font-display text-3xl font-bold text-white">Facility Intelligence Lite</h1>
+            <p className="text-gray-500 text-sm mt-0.5">Combined boiler &amp; chiller oversight — weekly compliance, drift analysis, water chemistry</p>
+          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="px-7 border-b" style={{ borderColor: `rgba(${ACCENT_RGB},0.06)` }}>
+      <div className="px-7 border-b" style={{ borderColor: 'rgba(251,191,36,0.06)' }}>
         <div className="flex gap-5">
-          {TABS.map((t) => (
+          {TABS.map(t => (
             <button key={t} onClick={() => setTab(t)}
               className="py-3.5 text-sm font-medium transition-colors border-b-2 -mb-px"
-              style={tab === t
-                ? { color: ACCENT, borderColor: ACCENT }
-                : { color: "rgba(148,163,184,0.45)", borderColor: "transparent" }}>
+              style={tab === t ? { color: '#fbbf24', borderColor: '#fbbf24' } : { color: 'rgba(148,163,184,0.45)', borderColor: 'transparent' }}>
               {t}
             </button>
           ))}
@@ -150,242 +289,324 @@ export default function FacilityPage() {
       <div className="px-7 py-6">
 
         {/* OVERVIEW */}
-        {tab === "Overview" && (
-          <>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex-1 relative">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700" width="14" height="14"
-                  viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                </svg>
-                <input type="text" placeholder="Search systems…" value={search} onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-xl pl-9 pr-4 py-2 text-sm text-gray-400 placeholder-gray-700 outline-none transition-all"
-                  style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }} />
-              </div>
-              <span className="text-xs text-gray-700">{filtered.length} systems</span>
-            </div>
-
-            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.01)" }}>
-              {filtered.map((s, i) => (
-                <div key={s.id} className="flex items-center gap-4 px-5 py-4 transition-colors"
-                  style={{ borderBottom: i < filtered.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = `rgba(${ACCENT_RGB},0.02)`; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center flex-wrap gap-2 mb-1">
-                      <h3 className="font-semibold text-sm text-white">{s.name}</h3>
-                      {s.tags.map((tag) => (
-                        <span key={tag} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                          style={{ background: `rgba(${ACCENT_RGB},0.08)`, color: ACCENT, border: `1px solid rgba(${ACCENT_RGB},0.15)` }}>
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="text-[11px] text-gray-700 font-mono">{s.id} · {s.docs} documents</p>
-                    <p className="text-[10px] text-gray-600 mt-0.5">{s.desc}</p>
-                  </div>
-                  <button onClick={() => setTab("Resources")}
-                    className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                    style={{ background: `rgba(${ACCENT_RGB},0.07)`, border: `1px solid rgba(${ACCENT_RGB},0.2)`, color: ACCENT }}>
-                    Docs →
-                  </button>
+        {tab === 'Overview' && (
+          <div>
+            {/* 8 stat tiles — 2 rows of 4 */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              {/* Row 1: Boiler (teal) */}
+              {[
+                { label: 'Boiler Avg Cond. PPM', val: bAvgCondPPM, color: '#00FFE1' },
+                { label: 'Boiler Avg Water Level %', val: bAvgWaterLevel, color: '#00FFE1' },
+                { label: 'Boiler Avg Delta Temp °F', val: bAvgDelta, color: '#00FFE1' },
+                { label: 'Boiler Logs This Week', val: bLogsWeek.toString(), color: '#00FFE1' },
+                { label: 'Chiller Avg CW Delta °F', val: cAvgCWDelta, color: '#38bdf8' },
+                { label: 'Chiller Avg Cond. Delta °F', val: cAvgCondDelta, color: '#38bdf8' },
+                { label: 'Chiller Basin Level %', val: cAvgBasin, color: '#38bdf8' },
+                { label: 'Chiller Logs This Week', val: cLogsWeek.toString(), color: '#38bdf8' },
+              ].map(t => (
+                <div key={t.label} className="p-4" style={GLASS_TILE}>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">{t.label}</p>
+                  <p className="text-2xl font-bold" style={{ color: t.color }}>{t.val}</p>
                 </div>
               ))}
             </div>
-            <div className="mt-6">
-              <VirtuousBoard userName={user?.name || "Technician"} />
+
+            {/* 2 charts side by side */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="p-4" style={GLASS}>
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Boiler Conductivity Trend</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <LineChart data={boilerChartData}>
+                    <XAxis dataKey="name" tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={40} />
+                    <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(0,255,225,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
+                    <Line type="monotone" dataKey="conductivity" stroke="#00FFE1" strokeWidth={2} dot={false} connectNulls name="Conductivity PPM" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="p-4" style={GLASS}>
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Chiller CW Delta Trend</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <LineChart data={chillerChartData}>
+                    <XAxis dataKey="name" tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
+                    <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(56,189,248,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
+                    <Line type="monotone" dataKey="cwDelta" stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls name="CW Delta °F" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </>
+          </div>
         )}
 
-        {/* LOG DATA */}
-        {tab === "Log Data" && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {/* Form */}
-            <div className="rounded-2xl p-6" style={{ background: "rgba(255,255,255,0.02)", border: `1px solid rgba(${ACCENT_RGB},0.1)` }}>
-              <h2 className="font-bold text-white mb-1 text-sm">Submit Facility Reading</h2>
-              <p className="text-xs text-gray-600 mb-5">Logged locally and synced to Nexum Suum.</p>
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] text-gray-600 uppercase tracking-wide mb-1">Date</label>
-                    <input type="date" value={form.date} onChange={(e) => setF("date", e.target.value)}
-                      className="w-full rounded-lg px-3 py-2 text-sm text-gray-300 outline-none transition-all"
-                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-gray-600 uppercase tracking-wide mb-1">System Type</label>
-                    <select value={form.systemType} onChange={(e) => setF("systemType", e.target.value)}
-                      className="w-full rounded-lg px-3 py-2 text-sm text-gray-300 outline-none transition-all"
-                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                      <option value="">Select…</option>
-                      {["Boiler","Chiller","HVAC/AHU","Cooling Tower","Pump","Electrical","Air Compressor","Water Treatment","Feedwater/DA","General"].map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-gray-600 uppercase tracking-wide mb-1">Equipment ID</label>
-                    <input type="text" placeholder="FAC-001" value={form.equipmentId} onChange={(e) => setF("equipmentId", e.target.value)}
-                      className="w-full rounded-lg px-3 py-2 text-sm text-gray-300 placeholder-gray-700 outline-none transition-all"
-                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-gray-600 uppercase tracking-wide mb-1">Location</label>
-                    <input type="text" placeholder="Mechanical Room B" value={form.location} onChange={(e) => setF("location", e.target.value)}
-                      className="w-full rounded-lg px-3 py-2 text-sm text-gray-300 placeholder-gray-700 outline-none transition-all"
-                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-gray-600 uppercase tracking-wide mb-1">Reading Value</label>
-                    <input type="text" placeholder="12500" value={form.readingValue} onChange={(e) => setF("readingValue", e.target.value)}
-                      className="w-full rounded-lg px-3 py-2 text-sm text-gray-300 placeholder-gray-700 outline-none transition-all"
-                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-gray-600 uppercase tracking-wide mb-1">Unit</label>
-                    <input type="text" placeholder="kWh · PSI · °F · GPM" value={form.unit} onChange={(e) => setF("unit", e.target.value)}
-                      className="w-full rounded-lg px-3 py-2 text-sm text-gray-300 placeholder-gray-700 outline-none transition-all"
-                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-gray-600 uppercase tracking-wide mb-1">Status</label>
-                    <select value={form.status} onChange={(e) => setF("status", e.target.value)}
-                      className="w-full rounded-lg px-3 py-2 text-sm text-gray-300 outline-none transition-all"
-                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                      {["Normal","Caution","Alert","Offline","Maintenance"].map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-gray-600 uppercase tracking-wide mb-1">Tech Name</label>
-                    <input type="text" placeholder={user.name} value={form.techName} onChange={(e) => setF("techName", e.target.value)}
-                      className="w-full rounded-lg px-3 py-2 text-sm text-gray-300 placeholder-gray-700 outline-none transition-all"
-                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-[10px] text-gray-600 uppercase tracking-wide mb-1">Notes</label>
-                    <textarea value={form.notes} onChange={(e) => setF("notes", e.target.value)} rows={2}
-                      placeholder="Observations, work orders, events…"
-                      className="w-full rounded-lg px-3 py-2 text-sm text-gray-300 placeholder-gray-700 outline-none transition-all resize-none"
-                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
-                  </div>
+        {/* VIRTUOUSBOARD */}
+        {tab === 'VirtuousBoard' && (
+          <div>
+            {/* Drift Analyzer */}
+            <div className="p-6 mb-6" style={GLASS}>
+              <h2 className="font-display text-xl font-semibold text-white mb-4">System Drift Analyzer</h2>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+                <div>
+                  <label style={LABEL_STYLE}>OAT °F (outside air)</label>
+                  <input type="number" value={oat} onChange={e => setOat(e.target.value)} placeholder="65" style={INPUT_STYLE} />
                 </div>
-                <button type="submit" disabled={submitting}
-                  className="w-full py-2.5 rounded-xl font-bold text-sm transition-all"
-                  style={{
-                    background: saved ? "rgba(52,211,153,0.1)" : `rgba(${ACCENT_RGB},0.1)`,
-                    border: `1px solid ${saved ? "rgba(52,211,153,0.35)" : `rgba(${ACCENT_RGB},0.3)`}`,
-                    color: saved ? "#34d399" : ACCENT,
-                  }}>
-                  {saved ? "✓ Saved" : submitting ? "Saving…" : "Submit Reading →"}
-                </button>
-              </form>
+                <div>
+                  <label style={LABEL_STYLE}>Boiler Supply Target °F</label>
+                  <input type="number" value={boilerSupplyTarget} onChange={e => setBoilerSupplyTarget(e.target.value)} style={INPUT_STYLE} />
+                </div>
+                <div>
+                  <label style={LABEL_STYLE}>Boiler Return Target °F</label>
+                  <input type="number" value={boilerReturnTarget} onChange={e => setBoilerReturnTarget(e.target.value)} style={INPUT_STYLE} />
+                </div>
+                <div>
+                  <label style={LABEL_STYLE}>Chiller Supply Target °F</label>
+                  <input type="number" value={chillerSupplyTarget} onChange={e => setChillerSupplyTarget(e.target.value)} style={INPUT_STYLE} />
+                </div>
+                <div>
+                  <label style={LABEL_STYLE}>Chiller Return Target °F</label>
+                  <input type="number" value={chillerReturnTarget} onChange={e => setChillerReturnTarget(e.target.value)} style={INPUT_STYLE} />
+                </div>
+              </div>
+
+              {/* Drift result cards */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="p-4" style={GLASS_TILE}>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-2">Boiler Supply Delta</p>
+                  {actualBoilerDelta !== null && !isNaN(actualBoilerDelta) ? (
+                    <>
+                      <p className="text-2xl font-bold" style={{ color: colorDrift(actualBoilerDelta - targetBoilerDelta) }}>
+                        {actualBoilerDelta.toFixed(1)}°F
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">Target: {targetBoilerDelta}°F delta · Drift: {(actualBoilerDelta - targetBoilerDelta).toFixed(1)}°F</p>
+                    </>
+                  ) : <p className="text-gray-600 text-sm">No boiler data</p>}
+                </div>
+                <div className="p-4" style={GLASS_TILE}>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-2">Boiler Return Delta</p>
+                  {lastBoiler && parseFloat(lastBoiler.returnTemp) > 0 ? (
+                    <>
+                      <p className="text-2xl font-bold" style={{ color: colorDrift(parseFloat(lastBoiler.returnTemp) - parseFloat(boilerReturnTarget)) }}>
+                        {parseFloat(lastBoiler.returnTemp).toFixed(1)}°F
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">Target: {boilerReturnTarget}°F · Diff: {(parseFloat(lastBoiler.returnTemp) - parseFloat(boilerReturnTarget)).toFixed(1)}°F</p>
+                    </>
+                  ) : <p className="text-gray-600 text-sm">No boiler data</p>}
+                </div>
+                <div className="p-4" style={GLASS_TILE}>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-2">Chiller CW Delta</p>
+                  {actualChillerCWDelta !== null && !isNaN(actualChillerCWDelta) ? (
+                    <>
+                      <p className="text-2xl font-bold" style={{ color: colorDrift(actualChillerCWDelta - targetChillerDelta) }}>
+                        {actualChillerCWDelta.toFixed(1)}°F
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">Target: {targetChillerDelta}°F delta · Drift: {(actualChillerCWDelta - targetChillerDelta).toFixed(1)}°F</p>
+                    </>
+                  ) : <p className="text-gray-600 text-sm">No chiller data</p>}
+                </div>
+                <div className="p-4" style={GLASS_TILE}>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-2">Chiller Condenser Delta</p>
+                  {actualCondDelta !== null && !isNaN(actualCondDelta) ? (
+                    <>
+                      <p className="text-2xl font-bold" style={{ color: colorDrift(actualCondDelta - 10) }}>
+                        {actualCondDelta.toFixed(1)}°F
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">Target: 10°F delta · Drift: {(actualCondDelta - 10).toFixed(1)}°F</p>
+                    </>
+                  ) : <p className="text-gray-600 text-sm">No chiller data</p>}
+                </div>
+              </div>
+
+              {oatEstimate && oat && (
+                <p className="text-xs text-gray-500 italic">
+                  OAT {oat}°F — outdoor conditions may affect return temps by ±{oatEstimate}°F
+                </p>
+              )}
             </div>
 
-            {/* Chart + History */}
-            <div className="space-y-4">
-              {chartData.length > 0 && (
-                <div className="rounded-2xl p-5" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Reading History</p>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                      <XAxis dataKey="name" tick={{ fill: "#4b5563", fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: "#4b5563", fontSize: 10 }} axisLine={false} tickLine={false} width={40} />
-                      <Tooltip
-                        contentStyle={{ background: "#0a1929", border: `1px solid rgba(${ACCENT_RGB},0.15)`, borderRadius: 8, color: "#e2e8f0", fontSize: 11 }}
-                      />
-                      <Bar dataKey="Reading" fill={`rgba(${ACCENT_RGB},0.7)`} radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-
-              {logs.length > 0 && (
-                <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                  <div className="px-5 py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recent Readings</p>
-                  </div>
-                  {logs.slice(0, 8).map((log, i) => (
-                    <div key={i} className="flex items-center justify-between px-5 py-3 text-xs"
-                      style={{ borderBottom: i < 7 && i < logs.length - 1 ? "1px solid rgba(255,255,255,0.03)" : "none" }}>
-                      <span className="font-mono text-gray-700">{log.date || "—"}</span>
-                      <div className="flex gap-3 text-gray-600">
-                        {log.systemType && <span className="text-gray-500">{log.systemType}</span>}
-                        {log.readingValue && (
-                          <span><span style={{ color: ACCENT }}>{log.readingValue}</span> {log.unit}</span>
-                        )}
-                        {log.status && (
-                          <span style={{
-                            color: log.status === "Alert" ? "#f87171"
-                              : log.status === "Caution" ? "#fbbf24"
-                              : log.status === "Maintenance" ? "#fb923c"
-                              : "#6b7280",
-                          }}>{log.status}</span>
-                        )}
-                      </div>
-                      <span className="text-gray-700">{log.techName}</span>
+            {/* Weekly Compliance Scorecard */}
+            <div className="p-6 mb-6" style={GLASS}>
+              <h2 className="font-display text-xl font-semibold text-white mb-4">Weekly Compliance</h2>
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                {/* Log Threshold */}
+                <div className="p-4" style={GLASS_TILE}>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-2">Log Threshold (target: {logThreshold} each)</p>
+                  <div className="flex gap-4">
+                    <div>
+                      <span className="text-xs text-gray-500">Boiler: </span>
+                      <span className="font-bold" style={{ color: boilerLogsWeek.length >= logThreshold ? '#22c55e' : '#ef4444' }}>
+                        {boilerLogsWeek.length}/{logThreshold}
+                      </span>
+                      <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{
+                        background: boilerLogsWeek.length >= logThreshold ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                        color: boilerLogsWeek.length >= logThreshold ? '#22c55e' : '#ef4444',
+                        border: `1px solid ${boilerLogsWeek.length >= logThreshold ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                      }}>{boilerLogsWeek.length >= logThreshold ? 'Met' : 'Behind'}</span>
                     </div>
-                  ))}
+                  </div>
+                  <div className="flex gap-4 mt-1">
+                    <div>
+                      <span className="text-xs text-gray-500">Chiller: </span>
+                      <span className="font-bold" style={{ color: chillerLogsWeek.length >= logThreshold ? '#22c55e' : '#ef4444' }}>
+                        {chillerLogsWeek.length}/{logThreshold}
+                      </span>
+                      <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{
+                        background: chillerLogsWeek.length >= logThreshold ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                        color: chillerLogsWeek.length >= logThreshold ? '#22c55e' : '#ef4444',
+                        border: `1px solid ${chillerLogsWeek.length >= logThreshold ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                      }}>{chillerLogsWeek.length >= logThreshold ? 'Met' : 'Behind'}</span>
+                    </div>
+                  </div>
                 </div>
-              )}
 
-              {logs.length === 0 && (
-                <div className="rounded-2xl p-8 text-center" style={{ background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)" }}>
-                  <p className="text-gray-700 text-sm">No readings yet — submit your first log entry.</p>
+                {/* PM Compliance */}
+                <div className="p-4" style={GLASS_TILE}>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-2">PM Compliance (target: 5 PMs)</p>
+                  <p className="text-xl font-bold mb-2" style={{ color: pmCount >= 5 ? '#22c55e' : '#fbbf24' }}>{pmCount}/5</p>
+                  <div className="w-full rounded-full h-1.5" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    <div className="h-1.5 rounded-full transition-all" style={{
+                      width: `${Math.min(100, (pmCount / 5) * 100)}%`,
+                      background: pmCount >= 5 ? '#22c55e' : '#00FFE1',
+                    }} />
+                  </div>
                 </div>
-              )}
+
+                {/* Water Chemistry */}
+                <div className="p-4" style={GLASS_TILE}>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-2">Water Chemistry</p>
+                  {lastBoilerCond !== null && !isNaN(lastBoilerCond) && (
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 rounded-full" style={{ background: lastBoilerCond > 2500 ? '#ef4444' : lastBoilerCond < 500 ? '#f59e0b' : '#22c55e' }} />
+                      <span className="text-xs text-gray-400">Conductivity: {lastBoilerCond} PPM</span>
+                    </div>
+                  )}
+                  {lastBoilerPH !== null && !isNaN(lastBoilerPH) && (
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 rounded-full" style={{ background: lastBoilerPH >= 8.3 && lastBoilerPH <= 9.5 ? '#22c55e' : '#f59e0b' }} />
+                      <span className="text-xs text-gray-400">pH: {lastBoilerPH} (target 8.3–9.5)</span>
+                    </div>
+                  )}
+                  {lastChillerHardness !== null && !isNaN(lastChillerHardness) && (
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ background: lastChillerHardness >= 200 ? '#ef4444' : '#22c55e' }} />
+                      <span className="text-xs text-gray-400">Hardness: {lastChillerHardness} PPM</span>
+                    </div>
+                  )}
+                  {lastBoilerCond === null && lastChillerHardness === null && (
+                    <p className="text-xs text-gray-600">No chemistry data yet</p>
+                  )}
+                </div>
+
+                {/* Open Items */}
+                <div className="p-4" style={GLASS_TILE}>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-2">Open Items This Week</p>
+                  {openItems > 0 ? (
+                    <span className="text-sm font-semibold px-3 py-1 rounded-full" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+                      {openItems} item{openItems > 1 ? 's' : ''} need attention
+                    </span>
+                  ) : (
+                    <span className="text-sm font-semibold px-3 py-1 rounded-full" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}>
+                      All clear
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Weekly entry form */}
+              <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(0,255,225,0.08)' }}>
+                <h3 className="font-display text-base font-semibold text-white mb-3">Weekly Entry Log</h3>
+                <form onSubmit={handleVirtuousSubmit}>
+                  <div className="grid md:grid-cols-4 gap-3 mb-3">
+                    <div>
+                      <label style={LABEL_STYLE}>Inspection Type</label>
+                      <select value={vForm.inspectionType} onChange={e => setVForm(f => ({ ...f, inspectionType: e.target.value }))} style={INPUT_STYLE}>
+                        {['Boiler Log', 'Chiller Log', 'PM', 'Inspection', 'Water Test'].map(o => (
+                          <option key={o} value={o}>{o}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={LABEL_STYLE}>Severity</label>
+                      <select value={vForm.severity} onChange={e => setVForm(f => ({ ...f, severity: e.target.value }))} style={INPUT_STYLE}>
+                        {['low', 'medium', 'high', 'critical'].map(o => (
+                          <option key={o} value={o}>{o}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={LABEL_STYLE}>Status</label>
+                      <select value={vForm.status} onChange={e => setVForm(f => ({ ...f, status: e.target.value }))} style={INPUT_STYLE}>
+                        {['open', 'in-progress', 'resolved'].map(o => (
+                          <option key={o} value={o}>{o}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={LABEL_STYLE}>Finding</label>
+                      <input type="text" value={vForm.finding} onChange={e => setVForm(f => ({ ...f, finding: e.target.value }))}
+                        placeholder="Describe finding…" style={INPUT_STYLE} required />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={vSubmitting}
+                    className="px-5 py-2 rounded-xl text-sm font-semibold transition-all"
+                    style={{ background: 'rgba(0,255,225,0.1)', color: '#00FFE1', border: '1px solid rgba(0,255,225,0.22)' }}>
+                    <Plus size={13} className="inline mr-1" />
+                    {vSubmitting ? 'Saving…' : 'Log Entry'}
+                  </button>
+                </form>
+              </div>
             </div>
+
+            {/* Recent virtuous entries */}
+            {virtEntries.length > 0 && (
+              <div className="mt-4" style={GLASS}>
+                <div className="px-5 py-3 border-b" style={{ borderColor: 'rgba(0,255,225,0.08)' }}>
+                  <p className="text-xs uppercase tracking-widest text-gray-500">Recent Entries</p>
+                </div>
+                {virtEntries.slice(0, 10).map(e => (
+                  <div key={e.id} className="flex items-center gap-4 px-5 py-3 border-b text-sm text-gray-400"
+                    style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{
+                      background: e.severity === 'critical' ? 'rgba(239,68,68,0.1)' : e.severity === 'high' ? 'rgba(249,115,22,0.1)' : e.severity === 'medium' ? 'rgba(245,158,11,0.1)' : 'rgba(34,197,94,0.1)',
+                      color: e.severity === 'critical' ? '#ef4444' : e.severity === 'high' ? '#f97316' : e.severity === 'medium' ? '#f59e0b' : '#22c55e',
+                    }}>{e.severity}</span>
+                    <span className="text-gray-500 text-xs">{e.inspectionType}</span>
+                    <span className="flex-1">{e.finding}</span>
+                    <span className="text-[10px] text-gray-600">{e.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {/* DIAGNOSTICS */}
-        {tab === "Diagnostics" && (
+        {tab === 'Diagnostics' && (
           <ProbabilityFeed userName={user.name} />
         )}
 
-        {/* CALCULATORS */}
-        {tab === "Calculators" && (
-          <div className="max-w-5xl">
-            <p className="text-[11px] uppercase tracking-widest text-gray-600 mb-4">Efficiency Analysis Tools</p>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <BoilerCalculator />
-              <ChillerCalculator />
-            </div>
-          </div>
-        )}
-
         {/* RESOURCES */}
-        {tab === "Resources" && (
+        {tab === 'Resources' && (
           <div className="max-w-3xl">
-            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.01)" }}>
-              {PRODUCTS.facility_intelligence_advanced.documents.map((doc, i, arr) => (
+            <div style={GLASS}>
+              {FACILITY_INTELLIGENCE.documents.map((doc, i, arr) => (
                 <a key={doc.file} href={`/library/${doc.file}`} target="_blank" rel="noreferrer"
                   className="flex items-center justify-between px-5 py-3.5 transition-all group"
-                  style={{ borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.03)" : "none" }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = `rgba(${ACCENT_RGB},0.02)`; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; }}>
+                  style={{ borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(251,191,36,0.02)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent'; }}>
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded"
-                      style={{
-                        color: doc.type === "pdf" ? "#fb923c" : doc.type === "xlsx" ? "#34d399" : "#60a5fa",
-                        background: "rgba(255,255,255,0.05)",
-                      }}>
+                      style={{ color: doc.type === 'pdf' ? '#fb923c' : doc.type === 'xlsx' ? '#34d399' : '#60a5fa', background: 'rgba(255,255,255,0.05)' }}>
                       {doc.type.toUpperCase()}
                     </span>
                     <span className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors">{doc.label}</span>
                   </div>
-                  <span className="text-xs text-gray-700 group-hover:transition-colors" style={{ color: undefined }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLSpanElement).style.color = ACCENT; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLSpanElement).style.color = ""; }}>↓</span>
+                  <span className="text-xs text-gray-700 group-hover:text-amber-400 transition-colors">↓</span>
                 </a>
               ))}
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
