@@ -2,3 +2,7 @@ node_modules
 .next
 out
 tsconfig.tsbuildinfo
+.same
+bun.lock
+components.json
+*.tsbuildinfo
