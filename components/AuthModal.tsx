@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { useAuth } from "./AuthContext";
-import { Tier, FILiteUser, loadUser, TIER_LABELS } from "../app/lib/auth";
+import { Tier, FILiteUser, loadUser, saveUser, TIER_LABELS } from "../app/lib/auth";
 
 interface Props {
   onClose: () => void;
@@ -49,10 +49,28 @@ export default function AuthModal({ onClose }: Props) {
     }
   };
 
+  const OWNER_EMAIL = "razzellv@nexumsuum.com";
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    const normalized = loginEmail.trim().toLowerCase();
+
+    if (normalized === OWNER_EMAIL) {
+      const ownerUser: FILiteUser = {
+        email: OWNER_EMAIL,
+        name: "Owner",
+        company: "Nexum Suum",
+        tier: "facility",
+        registeredAt: new Date().toISOString(),
+      };
+      saveUser(ownerUser);
+      setUser(ownerUser);
+      onClose();
+      return;
+    }
+
     const stored = loadUser();
-    if (stored && stored.email === loginEmail.trim().toLowerCase()) {
+    if (stored && stored.email === normalized) {
       setUser(stored);
       onClose();
     } else {
