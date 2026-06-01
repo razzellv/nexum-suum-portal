@@ -1,6 +1,6 @@
 import { apiPost } from './api';
 
-export type LogType = 'boiler' | 'chiller' | 'facility';
+export type LogType = 'boiler' | 'chiller' | 'facility' | 'virtuous';
 
 // Log fields
 export interface BoilerLog {

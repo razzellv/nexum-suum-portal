@@ -1,17 +1,20 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { Snowflake, Plus, ChevronDown } from "lucide-react";
-import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { Snowflake, Plus, ChevronDown, Lock } from "lucide-react";
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useAuth } from "../../components/AuthContext";
 import { apiPost } from "../lib/api";
 import { loadLogs, saveLogs } from "../lib/logData";
 import { CHILLER_INTELLIGENCE } from "../lib/products";
+import { isUnlocked } from "../lib/auth";
+import PreviewBanner from "../../components/PreviewBanner";
+import LockedInput from "../../components/LockedInput";
 
 const GLASS = {
   background: 'rgba(2,10,18,0.75)',
   backdropFilter: 'blur(12px)',
   WebkitBackdropFilter: 'blur(12px)',
-  border: '1px solid rgba(0,255,225,0.1)',
+  border: '1px solid rgba(56,189,248,0.1)',
   borderRadius: '16px',
 } as React.CSSProperties;
 
@@ -19,7 +22,7 @@ const GLASS_TILE = {
   background: 'rgba(4,16,28,0.85)',
   backdropFilter: 'blur(16px)',
   WebkitBackdropFilter: 'blur(16px)',
-  border: '1px solid rgba(0,255,225,0.1)',
+  border: '1px solid rgba(56,189,248,0.1)',
   borderRadius: '12px',
 } as React.CSSProperties;
 
@@ -43,7 +46,7 @@ interface ChillerLog {
   timestamp: number;
 }
 
-const TABS = ['Overview', 'Log Data', 'Calculator', 'Resources'] as const;
+const TABS = ['Compliance Overview', 'Log Data', 'Calculator', 'Documents'] as const;
 type Tab = typeof TABS[number];
 
 const ACCENT = "#38bdf8";
@@ -89,27 +92,56 @@ function getWeekRange() {
   return { start: mon.getTime(), end: sun.getTime() };
 }
 
-function avg(logs: ChillerLog[], key: keyof ChillerLog): string {
+function avgNum(logs: ChillerLog[], key: keyof ChillerLog): number {
   const vals = logs.map(l => parseFloat(l[key] as string)).filter(v => !isNaN(v) && v > 0);
-  if (!vals.length) return '—';
-  return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+  if (!vals.length) return 0;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-function avgDelta(logs: ChillerLog[], keyA: keyof ChillerLog, keyB: keyof ChillerLog): string {
-  const vals = logs.map(l => parseFloat(l[keyA] as string) - parseFloat(l[keyB] as string)).filter(v => !isNaN(v));
-  if (!vals.length) return '—';
-  return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+const DEMO_CHART = Array.from({ length: 14 }, (_, i) => {
+  const d = new Date(2026, 4, 16 + i);
+  return {
+    name: `${d.getMonth() + 1}/${d.getDate()}`,
+    cwSupply: 44 + [1.2, 0.8, 1.5, 0.4, 1.1, 0.2, 1.8, 0.9, 0.5, 2.0, 1.3, 0.3, 1.6, 0.7][i],
+    cwReturn: 56 + [0.9, 0.6, 1.2, 0.3, 0.8, 0.1, 1.4, 0.7, 0.4, 1.6, 1.0, 0.2, 1.3, 0.5][i],
+    basinLevel: 72 + [3, 2, 5, 1, 4, 1, 6, 3, 2, 7, 4, 1, 5, 2][i],
+  };
+});
+
+const DEMO_LOGS: ChillerLog[] = [
+  { id: 'd1', employeeName: 'M. Rodriguez', title: 'Chiller Tech', description: 'Refrigerant temps checked — discharge nominal', dateTime: '2026-05-27T10:00', cwSupplyTemp: '44.8', cwReturnTemp: '56.2', condSupplyTemp: '82', condReturnTemp: '92', supplyPSI: '85', returnPSI: '80', refSuctionTemp: '38', refDischargeTemp: '118', basinLevel: '74', hardness: '180', oilVolume: '', timestamp: 1748340000000 },
+  { id: 'd2', employeeName: 'T. Barnes', title: 'HVAC Tech', description: 'Basin water treatment — hardness in range', dateTime: '2026-05-26T09:30', cwSupplyTemp: '45.1', cwReturnTemp: '56.8', condSupplyTemp: '84', condReturnTemp: '94', supplyPSI: '84', returnPSI: '79', refSuctionTemp: '37', refDischargeTemp: '121', basinLevel: '71', hardness: '195', oilVolume: '', timestamp: 1748259000000 },
+  { id: 'd3', employeeName: 'M. Rodriguez', title: 'Chiller Tech', description: 'COP calculated — 4.8, within target', dateTime: '2026-05-24T11:15', cwSupplyTemp: '44.5', cwReturnTemp: '55.9', condSupplyTemp: '81', condReturnTemp: '91', supplyPSI: '86', returnPSI: '81', refSuctionTemp: '39', refDischargeTemp: '116', basinLevel: '76', hardness: '170', oilVolume: '', timestamp: 1748084100000 },
+  { id: 'd4', employeeName: 'L. Santos', title: 'Sr. Operator', description: 'PM — condenser tubes inspected and cleaned', dateTime: '2026-05-22T08:45', cwSupplyTemp: '45.3', cwReturnTemp: '57.1', condSupplyTemp: '85', condReturnTemp: '95', supplyPSI: '83', returnPSI: '78', refSuctionTemp: '36', refDischargeTemp: '123', basinLevel: '69', hardness: '210', oilVolume: '', timestamp: 1747909500000 },
+  { id: 'd5', employeeName: 'T. Barnes', title: 'HVAC Tech', description: 'Weekly inspection — cooling tower drift check', dateTime: '2026-05-20T14:00', cwSupplyTemp: '44.9', cwReturnTemp: '56.4', condSupplyTemp: '83', condReturnTemp: '93', supplyPSI: '85', returnPSI: '80', refSuctionTemp: '38', refDischargeTemp: '119', basinLevel: '73', hardness: '185', oilVolume: '', timestamp: 1747742400000 },
+];
+
+function ChecklistItem({ label, status }: { label: string; status: 'current' | 'due-soon' | 'overdue' | 'preview' }) {
+  const colors = { current: '#22c55e', 'due-soon': '#f59e0b', overdue: '#ef4444', preview: '#4b5563' };
+  const statusLabels = { current: 'Current', 'due-soon': 'Due Soon', overdue: 'Overdue', preview: '—' };
+  const color = colors[status];
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b last:border-b-0" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+      <div className="flex items-center gap-2.5">
+        <span style={{ color: status === 'current' ? '#22c55e' : '#4b5563', fontSize: 14 }}>{status === 'current' ? '☑' : '☐'}</span>
+        <span className="text-sm text-gray-300">{label}</span>
+      </div>
+      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ color, background: `${color}18`, border: `1px solid ${color}40` }}>
+        {statusLabels[status]}
+      </span>
+    </div>
+  );
 }
 
 export default function ChillerPage() {
-  const { user } = useAuth();
-  const [tab, setTab] = useState<Tab>('Overview');
+  useAuth();
+  const unlocked = isUnlocked('chiller');
+  const [tab, setTab] = useState<Tab>('Compliance Overview');
   const [logs, setLogs] = useState<ChillerLog[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [submitting, setSubmitting] = useState(false);
 
-  // Calculator state
   const [coolingTons, setCoolingTons] = useState('');
   const [compressorKW, setCompressorKW] = useState('');
   const [cwSupply, setCwSupply] = useState('');
@@ -124,57 +156,78 @@ export default function ChillerPage() {
   }, []);
 
   const { start: weekStart, end: weekEnd } = getWeekRange();
+  const displayLogs = useMemo(() => unlocked ? logs : [], [unlocked, logs]);
+  const logsThisWeek = displayLogs.filter(l => l.timestamp >= weekStart && l.timestamp <= weekEnd).length;
 
-  const avgCWDelta = avgDelta(logs, 'cwReturnTemp', 'cwSupplyTemp');
-  const avgCondDelta = avgDelta(logs, 'condReturnTemp', 'condSupplyTemp');
-  const avgBasinLevel = avg(logs, 'basinLevel');
-  const logsThisWeek = logs.filter(l => l.timestamp >= weekStart && l.timestamp <= weekEnd).length;
+  const coolingScore = useMemo(() => {
+    if (!unlocked) return { label: 'Normal — 118°F discharge (demo)', color: '#22c55e' };
+    const vals = displayLogs.map(l => parseFloat(l.refDischargeTemp)).filter(v => !isNaN(v) && v > 0);
+    if (!vals.length) return { label: '—', color: '#4b5563' };
+    const a = vals.reduce((x, y) => x + y, 0) / vals.length;
+    return a > 130 ? { label: `Flagged — ${a.toFixed(0)}°F discharge`, color: '#ef4444' } : { label: `Normal — ${a.toFixed(0)}°F discharge`, color: '#22c55e' };
+  }, [displayLogs, unlocked]);
+
+  const avgCWDelta = useMemo(() => {
+    if (!unlocked) return '11.6°F (demo)';
+    const vals = displayLogs.slice(0, 30).map(l => parseFloat(l.cwReturnTemp) - parseFloat(l.cwSupplyTemp)).filter(v => !isNaN(v) && v > 0);
+    return vals.length ? `${(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)}°F` : '—';
+  }, [displayLogs, unlocked]);
+
+  const basinStatus = useMemo(() => {
+    if (!unlocked) return { label: 'Normal', sub: '72% avg (demo)', color: '#22c55e' };
+    const a = avgNum(displayLogs, 'basinLevel');
+    if (!a) return { label: '—', sub: 'No data', color: '#4b5563' };
+    return a < 50 ? { label: 'Low', sub: `${a.toFixed(0)}%`, color: '#ef4444' } : a > 90 ? { label: 'High', sub: `${a.toFixed(0)}%`, color: '#f59e0b' } : { label: 'Normal', sub: `${a.toFixed(0)}% avg`, color: '#22c55e' };
+  }, [displayLogs, unlocked]);
 
   const chartData = useMemo(() => {
-    return [...logs].reverse().slice(0, 20).map(l => ({
-      name: l.dateTime ? l.dateTime.slice(0, 10) : '—',
-      cwSupplyTemp: parseFloat(l.cwSupplyTemp) || null,
-      cwReturnTemp: parseFloat(l.cwReturnTemp) || null,
-      condDelta: (parseFloat(l.condReturnTemp) - parseFloat(l.condSupplyTemp)) || null,
+    if (!unlocked) return DEMO_CHART;
+    return [...logs].reverse().slice(0, 14).map(l => ({
+      name: l.dateTime ? l.dateTime.slice(5, 10) : '—',
+      cwSupply: parseFloat(l.cwSupplyTemp) || null,
+      cwReturn: parseFloat(l.cwReturnTemp) || null,
       basinLevel: parseFloat(l.basinLevel) || null,
-      oilVolume: parseFloat(l.oilVolume) || null,
     }));
-  }, [logs]);
+  }, [logs, unlocked]);
 
-  const hasOilData = logs.some(l => l.oilVolume && parseFloat(l.oilVolume) > 0);
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const checklist = useMemo(() => {
+    if (!unlocked) return Array(6).fill('preview') as ('current' | 'due-soon' | 'overdue' | 'preview')[];
+    const wk = displayLogs.filter(l => l.timestamp >= weekStart && l.timestamp <= weekEnd);
+    const mo = displayLogs.filter(l => l.timestamp >= monthStart.getTime());
+    return [
+      wk.some(l => l.refSuctionTemp && l.refDischargeTemp) ? 'current' : 'overdue',
+      wk.some(l => l.basinLevel) ? 'current' : 'overdue',
+      wk.some(l => l.condSupplyTemp && l.condReturnTemp) ? 'current' : 'due-soon',
+      mo.some(l => l.hardness) ? 'current' : 'due-soon',
+      wk.some(l => l.cwSupplyTemp && l.cwReturnTemp) ? 'current' : 'due-soon',
+      displayLogs.some(l => l.timestamp >= monthStart.getTime() && /pm|preventive/i.test(l.description)) ? 'current' : 'due-soon',
+    ] as ('current' | 'due-soon' | 'overdue' | 'preview')[];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayLogs, unlocked, weekStart, weekEnd]);
 
-  // Calculator
   const calc = useMemo(() => {
     const tons = parseFloat(coolingTons) || 0;
     const kw = parseFloat(compressorKW) || 0;
-    const cws = parseFloat(cwSupply) || 0;
-    const cwr = parseFloat(cwReturn) || 0;
+    const sup = parseFloat(cwSupply) || 0;
+    const ret = parseFloat(cwReturn) || 0;
     const gpm = parseFloat(flowRateGPM) || 0;
     const rate = parseFloat(electricityRate) || 0.12;
-
-    const cop = kw > 0 && tons > 0 ? (tons * 3.517) / kw : 0;
-    const eer = cop * 3.412;
+    const btuHr = gpm > 0 && ret > sup ? gpm * 500 * (ret - sup) : tons * 12000;
+    const cop = kw > 0 ? (btuHr / 3412) / kw : 0;
+    const eer = kw > 0 ? btuHr / (kw * 1000) : 0;
     const kwPerTon = tons > 0 && kw > 0 ? kw / tons : 0;
-    const btuPerHr = gpm > 0 ? gpm * 500 * (cwr - cws) : 0;
-    const costPerHr = kw * rate;
-    const costPerDay = costPerHr * 24;
-    const rating = cop > 5.5 ? 'Excellent' : cop > 4 ? 'Good' : cop > 3 ? 'Fair' : 'Poor';
-    const ratingColor = rating === 'Excellent' ? '#22c55e' : rating === 'Good' ? '#00FFE1' : rating === 'Fair' ? '#f59e0b' : '#ef4444';
-    return {
-      cop: cop.toFixed(2), eer: eer.toFixed(2), kwPerTon: kwPerTon.toFixed(3),
-      btuPerHr: btuPerHr.toFixed(0), costPerHr: costPerHr.toFixed(2), costPerDay: costPerDay.toFixed(2),
-      rating, ratingColor,
-    };
-  }, [coolingTons, compressorKW, cwSupply, cwReturn, flowRateGPM, condSupply, condReturn, electricityRate]);
+    const hrCost = kw * rate;
+    const rating = cop > 5.5 ? 'Excellent' : cop > 4.5 ? 'Good' : cop > 3.5 ? 'Fair' : cop > 0 ? 'Poor' : '—';
+    const rc = rating === 'Excellent' ? '#22c55e' : rating === 'Good' ? '#38bdf8' : rating === 'Fair' ? '#f59e0b' : '#ef4444';
+    return { cop: cop.toFixed(2), eer: eer.toFixed(1), kwPerTon: kwPerTon.toFixed(3), btuHr: (btuHr / 1000).toFixed(1), hrCost: hrCost.toFixed(2), dayCost: (hrCost * 24).toFixed(2), rating, rc };
+  }, [coolingTons, compressorKW, cwSupply, cwReturn, flowRateGPM, electricityRate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!unlocked) return;
     setSubmitting(true);
-    const entry: ChillerLog = {
-      id: crypto.randomUUID(),
-      ...form,
-      timestamp: Date.now(),
-    };
+    const entry: ChillerLog = { id: crypto.randomUUID(), ...form, timestamp: Date.now() };
     const updated = [entry, ...logs];
     saveLogs('chiller', updated);
     try { await apiPost('/logs/chiller', entry); } catch { /* offline */ }
@@ -184,63 +237,52 @@ export default function ChillerPage() {
     setSubmitting(false);
   }
 
-  function logsThisWeekByEmployee(name: string) {
-    return logs.filter(l => l.employeeName === name && l.timestamp >= weekStart && l.timestamp <= weekEnd).length;
-  }
-
-  const canAccess = user && (user.tier === 'chiller' || user.tier === 'facility');
-
-  if (!user) return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <p className="text-gray-500 mb-4 text-sm">Sign in to access Chiller Intelligence.</p>
-    </div>
-  );
-  if (!canAccess) return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <p className="text-gray-500 mb-2 text-sm">Chiller Intelligence requires the Chiller or Facility tier.</p>
-      <a href="https://nexumsuum-facilityintelligence.com/pricing" target="_blank" rel="noreferrer"
-        className="px-4 py-2 rounded-xl text-sm font-bold mt-3" style={{ background: ACCENT, color: '#001923' }}>Upgrade Tier →</a>
-    </div>
-  );
+  const tableRows = unlocked ? logs : DEMO_LOGS;
 
   return (
     <div style={{ background: '#030d14', minHeight: '100%', position: 'relative', zIndex: 1 }}>
-      {/* Header */}
-      <div className="px-7 pt-7 pb-5 border-b" style={{ borderColor: `rgba(${ACCENT_RGB},0.06)` }}>
+      {!unlocked && <PreviewBanner tier="chiller" />}
+
+      <div className="px-7 pt-7 pb-5 border-b" style={{ borderColor: 'rgba(56,189,248,0.06)' }}>
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: `rgba(${ACCENT_RGB},0.08)`, border: `1px solid rgba(${ACCENT_RGB},0.18)` }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `rgba(${ACCENT_RGB},0.08)`, border: `1px solid rgba(${ACCENT_RGB},0.18)` }}>
             <Snowflake size={18} style={{ color: ACCENT }} />
           </div>
           <div>
             <h1 className="font-display text-xl font-bold text-white">Chiller Intelligence</h1>
-            <p className="text-gray-600 text-xs">Chilled Water · Cooling Tower · Refrigerant</p>
+            <p className="text-gray-600 text-xs">Refrigerant · Cooling Water · Basin · COP/EER</p>
           </div>
         </div>
-
-        {/* 4 stat tiles */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Avg CW Delta', val: avgCWDelta, unit: '°F' },
-            { label: 'Avg Cond. Delta', val: avgCondDelta, unit: '°F' },
-            { label: 'Avg Basin Level', val: avgBasinLevel, unit: '%' },
-            { label: 'Logs This Week', val: logsThisWeek.toString(), unit: '' },
-          ].map(t => (
-            <div key={t.label} className="p-4" style={GLASS_TILE}>
-              <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">{t.label}</p>
-              <p className="text-2xl font-bold" style={{ color: ACCENT }}>{t.val}</p>
-              {t.unit && <p className="text-[10px] text-gray-700 mt-0.5">{t.unit}</p>}
-            </div>
-          ))}
+          <div className="p-4" style={GLASS_TILE}>
+            <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Refrigerant Status</p>
+            <p className="text-xs font-semibold truncate" style={{ color: coolingScore.color }}>{coolingScore.label}</p>
+          </div>
+          <div className="p-4" style={GLASS_TILE}>
+            <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Basin Water</p>
+            <span className="inline-block text-sm font-bold px-2 py-0.5 rounded-full" style={{ color: basinStatus.color, background: `${basinStatus.color}18`, border: `1px solid ${basinStatus.color}40` }}>{basinStatus.label}</span>
+            <p className="text-[10px] text-gray-700 mt-1.5">{basinStatus.sub}</p>
+          </div>
+          <div className="p-4" style={GLASS_TILE}>
+            <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Avg CW Delta</p>
+            <p className="text-lg font-bold truncate" style={{ color: ACCENT }}>{avgCWDelta}</p>
+            <p className="text-[10px] text-gray-700 mt-0.5">target: 10–14°F</p>
+          </div>
+          <div className="p-4" style={GLASS_TILE}>
+            <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Weekly Log Count</p>
+            <p className="text-2xl font-bold" style={{ color: logsThisWeek >= 5 ? '#22c55e' : '#f59e0b' }}>
+              {unlocked ? logsThisWeek : '—'}<span className="text-sm text-gray-600">/5</span>
+            </p>
+            <p className="text-[10px] text-gray-700 mt-0.5">target: 5/week</p>
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="px-7 border-b" style={{ borderColor: `rgba(${ACCENT_RGB},0.06)` }}>
-        <div className="flex gap-5">
+      <div className="px-7 border-b" style={{ borderColor: 'rgba(56,189,248,0.06)' }}>
+        <div className="flex gap-5 overflow-x-auto">
           {TABS.map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className="py-3.5 text-sm font-medium transition-colors border-b-2 -mb-px"
+              className="py-3.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap"
               style={tab === t ? { color: ACCENT, borderColor: ACCENT } : { color: 'rgba(148,163,184,0.45)', borderColor: 'transparent' }}>
               {t}
             </button>
@@ -250,120 +292,98 @@ export default function ChillerPage() {
 
       <div className="px-7 py-6">
 
-        {/* OVERVIEW */}
-        {tab === 'Overview' && (
+        {tab === 'Compliance Overview' && (
           <div>
             <div className="grid md:grid-cols-2 gap-4 mb-4">
-              {/* Chart 1: Dual CW temps */}
               <div className="p-4" style={GLASS}>
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">CW Supply / Return Temps °F</p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Chilled Water Supply + Return °F {!unlocked && <span className="text-gray-700">(demo)</span>}</p>
                 <ResponsiveContainer width="100%" height={160}>
                   <LineChart data={chartData}>
                     <XAxis dataKey="name" tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
+                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={40} domain={['auto', 'auto']} />
                     <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(56,189,248,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
-                    <Legend wrapperStyle={{ fontSize: 10, color: '#6b7280' }} />
-                    <Line type="monotone" dataKey="cwSupplyTemp" stroke="#00FFE1" strokeWidth={2} dot={false} connectNulls name="CW Supply" />
-                    <Line type="monotone" dataKey="cwReturnTemp" stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls name="CW Return" />
+                    <Line type="monotone" dataKey="cwSupply" stroke={ACCENT} strokeWidth={2} dot={false} connectNulls name="CW Supply °F" />
+                    <Line type="monotone" dataKey="cwReturn" stroke="#a78bfa" strokeWidth={2} dot={false} connectNulls name="CW Return °F" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-
-              {/* Chart 2: Condenser delta */}
               <div className="p-4" style={GLASS}>
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Condenser Delta °F</p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Basin Water Level % {!unlocked && <span className="text-gray-700">(demo)</span>}</p>
                 <ResponsiveContainer width="100%" height={160}>
                   <AreaChart data={chartData}>
                     <XAxis dataKey="name" tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                    <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(251,191,36,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
+                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={35} domain={[0, 100]} />
+                    <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(56,189,248,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
                     <defs>
-                      <linearGradient id="condGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} />
+                      <linearGradient id="basinGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <Area type="monotone" dataKey="condDelta" stroke="#fbbf24" fill="url(#condGrad)" strokeWidth={2} dot={false} connectNulls name="Cond. Delta" />
+                    <Area type="monotone" dataKey="basinLevel" stroke={ACCENT} fill="url(#basinGrad)" strokeWidth={2} dot={false} connectNulls name="Basin Level %" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
-
-              {/* Chart 3: Basin Level */}
-              <div className="p-4" style={GLASS}>
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Basin Level %</p>
-                <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={chartData}>
-                    <XAxis dataKey="name" tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                    <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(52,211,153,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
-                    <Bar dataKey="basinLevel" fill="#34d399" radius={[4, 4, 0, 0]} name="Basin Level %" />
-                  </BarChart>
-                </ResponsiveContainer>
+            </div>
+            <div className="p-5 max-w-2xl" style={GLASS}>
+              <div className="flex items-center gap-2.5 mb-4">
+                <h3 className="font-display text-base font-semibold text-white">Chiller Compliance Checklist</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `rgba(${ACCENT_RGB},0.1)`, color: ACCENT, border: `1px solid rgba(${ACCENT_RGB},0.25)` }}>
+                  {unlocked ? `${checklist.filter(s => s === 'current').length}/6` : '6 items'}
+                </span>
+                {!unlocked && <span className="text-[10px] text-gray-600 italic">Purchase to track real status</span>}
               </div>
-
-              {/* Chart 4: Oil Volume (conditional) */}
-              {hasOilData && (
-                <div className="p-4" style={GLASS}>
-                  <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Oil Volume</p>
-                  <ResponsiveContainer width="100%" height={160}>
-                    <AreaChart data={chartData}>
-                      <XAxis dataKey="name" tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                      <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(167,139,250,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
-                      <defs>
-                        <linearGradient id="oilChGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <Area type="monotone" dataKey="oilVolume" stroke="#a78bfa" fill="url(#oilChGrad)" strokeWidth={2} dot={false} connectNulls name="Oil Volume" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+              {[
+                'Refrigerant temps logged this week',
+                'Basin water level checked',
+                'Condenser water temps logged',
+                'Water hardness tested this month',
+                'COP calculated this week',
+                'At least 1 PM entry this month',
+              ].map((label, i) => <ChecklistItem key={label} label={label} status={checklist[i]} />)}
             </div>
           </div>
         )}
 
-        {/* LOG DATA */}
         {tab === 'Log Data' && (
           <div>
             <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-gray-500">{logs.length} entries logged</p>
-              <button onClick={() => setShowForm(!showForm)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-                style={{ background: `rgba(${ACCENT_RGB},0.08)`, color: ACCENT, border: `1px solid rgba(${ACCENT_RGB},0.18)` }}>
-                {showForm ? <ChevronDown size={14} /> : <Plus size={14} />}
-                {showForm ? 'Hide Form' : 'Add Entry'}
-              </button>
+              <p className="text-sm text-gray-500">{unlocked ? `${logs.length} entries logged` : 'Preview — 5 demo rows'}</p>
+              <LockedInput locked={!unlocked} tier="chiller">
+                <button onClick={() => unlocked && setShowForm(!showForm)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
+                  style={{ background: `rgba(${ACCENT_RGB},0.08)`, color: ACCENT, border: `1px solid rgba(${ACCENT_RGB},0.18)` }}>
+                  {showForm ? <ChevronDown size={14} /> : <Plus size={14} />}
+                  {showForm ? 'Hide Form' : 'Add Entry'}
+                </button>
+              </LockedInput>
             </div>
 
-            {showForm && (
+            {showForm && unlocked && (
               <div className="mb-5 p-5" style={GLASS}>
                 <h3 className="font-display text-base font-semibold text-white mb-4">New Chiller Log Entry</h3>
                 <form onSubmit={handleSubmit}>
                   <div className="grid md:grid-cols-3 gap-4 mb-4">
-                    {[
-                      { key: 'employeeName', label: 'Employee Name', type: 'text' },
-                      { key: 'title', label: 'Title', type: 'text' },
-                      { key: 'dateTime', label: 'Date & Time', type: 'datetime-local' },
-                      { key: 'cwSupplyTemp', label: 'CW Supply Temp °F', type: 'number' },
-                      { key: 'cwReturnTemp', label: 'CW Return Temp °F', type: 'number' },
-                      { key: 'condSupplyTemp', label: 'Cond. Supply Temp °F', type: 'number' },
-                      { key: 'condReturnTemp', label: 'Cond. Return Temp °F', type: 'number' },
-                      { key: 'supplyPSI', label: 'Supply PSI', type: 'number' },
-                      { key: 'returnPSI', label: 'Return PSI', type: 'number' },
-                      { key: 'refSuctionTemp', label: 'Ref. Suction Temp °F', type: 'number' },
-                      { key: 'refDischargeTemp', label: 'Ref. Discharge Temp °F', type: 'number' },
-                      { key: 'basinLevel', label: 'Basin Level %', type: 'number' },
-                      { key: 'hardness', label: 'Hardness PPM (opt.)', type: 'number' },
-                      { key: 'oilVolume', label: 'Oil Volume (opt.)', type: 'number' },
-                    ].map(({ key, label, type }) => (
+                    {([
+                      ['employeeName', 'Employee Name', 'text'],
+                      ['title', 'Title', 'text'],
+                      ['dateTime', 'Date & Time', 'datetime-local'],
+                      ['cwSupplyTemp', 'CW Supply Temp °F', 'number'],
+                      ['cwReturnTemp', 'CW Return Temp °F', 'number'],
+                      ['condSupplyTemp', 'Condenser Supply °F', 'number'],
+                      ['condReturnTemp', 'Condenser Return °F', 'number'],
+                      ['supplyPSI', 'Supply PSI', 'number'],
+                      ['returnPSI', 'Return PSI', 'number'],
+                      ['refSuctionTemp', 'Ref Suction Temp °F', 'number'],
+                      ['refDischargeTemp', 'Ref Discharge Temp °F', 'number'],
+                      ['basinLevel', 'Basin Water Level %', 'number'],
+                      ['hardness', 'Water Hardness PPM (opt.)', 'number'],
+                      ['oilVolume', 'Oil Vol. gal (opt.)', 'number'],
+                    ] as [string, string, string][]).map(([key, label, type]) => (
                       <div key={key}>
                         <label style={LABEL_STYLE}>{label}</label>
                         <input type={type} value={(form as Record<string, string>)[key]}
-                          onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                          style={INPUT_STYLE} />
+                          onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} style={INPUT_STYLE} />
                       </div>
                     ))}
                     <div className="md:col-span-3">
@@ -375,138 +395,130 @@ export default function ChillerPage() {
                   </div>
                   <div className="flex gap-3">
                     <button type="submit" disabled={submitting}
-                      className="px-6 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                      className="px-6 py-2.5 rounded-xl text-sm font-semibold"
                       style={{ background: `rgba(${ACCENT_RGB},0.12)`, color: ACCENT, border: `1px solid rgba(${ACCENT_RGB},0.25)` }}>
                       {submitting ? 'Saving…' : 'Submit Entry →'}
                     </button>
                     <button type="button" onClick={() => setShowForm(false)}
-                      className="px-4 py-2.5 rounded-xl text-sm text-gray-500"
-                      style={{ border: '1px solid rgba(255,255,255,0.08)' }}>Cancel</button>
+                      className="px-4 py-2.5 rounded-xl text-sm text-gray-500" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>Cancel</button>
                   </div>
                 </form>
               </div>
             )}
 
-            {/* Neon table */}
-            {logs.length === 0 ? (
-              <div className="p-10 text-center" style={GLASS}>
-                <p className="text-gray-600 text-sm">No logs yet — add your first entry above.</p>
+            <div style={{ ...GLASS, opacity: unlocked ? 1 : 0.7 }}>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1000px]">
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: `rgba(${ACCENT_RGB},0.12)` }}>
+                      {['Employee', 'Title', 'Date / Desc', 'CW Sup°F', 'CW Ret°F', 'S-PSI', 'R-PSI', 'Ref Suc°F', 'Ref Dis°F', 'Basin%', 'Hardness', 'Week'].map(h => (
+                        <th key={h} className="px-3 py-2 text-left text-[10px] uppercase tracking-[0.15em] font-normal" style={{ color: `rgba(${ACCENT_RGB},0.5)` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableRows.length === 0 ? (
+                      <tr><td colSpan={12} className="px-4 py-10 text-center text-gray-600 text-sm">No logs yet — add your first entry above.</td></tr>
+                    ) : tableRows.map((log, idx) => (
+                      <tr key={log.id} className="border-b font-mono text-sm text-gray-300 hover:bg-[rgba(56,189,248,0.02)] transition-colors" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+                        <td className="px-3 py-2 max-w-[100px] truncate">{log.employeeName || '—'}</td>
+                        <td className="px-3 py-2 max-w-[80px] truncate">{log.title || '—'}</td>
+                        <td className="px-3 py-2 max-w-[150px]">
+                          <div className="text-[10px] text-gray-600">{log.dateTime || '—'}</div>
+                          <div className="truncate text-xs text-gray-500">{log.description}</div>
+                        </td>
+                        <td className="px-3 py-2">{log.cwSupplyTemp || '—'}</td>
+                        <td className="px-3 py-2">{log.cwReturnTemp || '—'}</td>
+                        <td className="px-3 py-2">{log.supplyPSI || '—'}</td>
+                        <td className="px-3 py-2">{log.returnPSI || '—'}</td>
+                        <td className="px-3 py-2">{log.refSuctionTemp || '—'}</td>
+                        <td className="px-3 py-2">{log.refDischargeTemp || '—'}</td>
+                        <td className="px-3 py-2">{log.basinLevel || '—'}</td>
+                        <td className="px-3 py-2">{log.hardness || '—'}</td>
+                        <td className="px-3 py-2">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ border: `1px solid rgba(${ACCENT_RGB},0.3)`, color: ACCENT }}>
+                            {unlocked ? logs.filter(l => l.employeeName === log.employeeName && l.timestamp >= weekStart && l.timestamp <= weekEnd).length : idx + 1}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ) : (
-              <div style={GLASS}>
-                <div className="grid px-4 py-2 border-b" style={{
-                  gridTemplateColumns: '1fr 1fr 2fr 80px 80px 70px 70px 120px 80px 90px 90px',
-                  borderColor: `rgba(${ACCENT_RGB},0.12)`,
-                }}>
-                  {['Employee', 'Title', 'Timestamp / Desc', 'CW Supply', 'CW Return', 'S PSI', 'R PSI', 'Ref Temps', 'Basin%', 'Hardness', 'This Week'].map(h => (
-                    <span key={h} className="text-[10px] uppercase tracking-[0.15em]" style={{ color: `rgba(${ACCENT_RGB},0.5)` }}>{h}</span>
-                  ))}
+              {!unlocked && (
+                <div className="px-5 py-3 border-t text-center" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+                  <span className="text-xs text-gray-600 flex items-center justify-center gap-1.5">
+                    <Lock size={10} /> Demo data — purchase Chiller Intelligence to log real data
+                  </span>
                 </div>
-                {logs.map(log => {
-                  const weekCount = logsThisWeekByEmployee(log.employeeName);
-                  return (
-                    <div key={log.id} className="grid px-4 py-2 border-b transition-colors font-mono text-sm text-gray-300"
-                      style={{
-                        gridTemplateColumns: '1fr 1fr 2fr 80px 80px 70px 70px 120px 80px 90px 90px',
-                        borderColor: 'rgba(255,255,255,0.04)',
-                      }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = `rgba(${ACCENT_RGB},0.025)`; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>
-                      <span className="truncate">{log.employeeName || '—'}</span>
-                      <span className="truncate">{log.title || '—'}</span>
-                      <div className="truncate">
-                        <div className="text-[10px] text-gray-600">{log.dateTime || '—'}</div>
-                        <div className="truncate text-xs text-gray-500">{log.description}</div>
-                      </div>
-                      <span>{log.cwSupplyTemp || '—'}</span>
-                      <span>{log.cwReturnTemp || '—'}</span>
-                      <span>{log.supplyPSI || '—'}</span>
-                      <span>{log.returnPSI || '—'}</span>
-                      <span className="text-xs">{log.refSuctionTemp && log.refDischargeTemp ? `${log.refSuctionTemp}°F / ${log.refDischargeTemp}°F` : '—'}</span>
-                      <span>{log.basinLevel || '—'}</span>
-                      <span>{log.hardness || '—'}</span>
-                      <span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full"
-                          style={{ border: `1px solid rgba(${ACCENT_RGB},0.3)`, color: ACCENT }}>
-                          {weekCount}
-                        </span>
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
 
-        {/* CALCULATOR */}
         {tab === 'Calculator' && (
           <div className="max-w-3xl">
             <div className="p-6" style={GLASS}>
-              <h2 className="font-display text-2xl font-bold text-white mb-6">Chiller Efficiency Calculator</h2>
+              <h2 className="font-display text-2xl font-bold text-white mb-1">Chiller Efficiency Calculator</h2>
+              <p className="text-gray-600 text-xs mb-6">Free to calculate — no purchase required</p>
               <div className="grid md:grid-cols-3 gap-4 mb-6">
-                {[
-                  { label: 'Cooling Tons', val: coolingTons, set: setCoolingTons, ph: '500' },
-                  { label: 'Compressor kW', val: compressorKW, set: setCompressorKW, ph: '300' },
-                  { label: 'CW Supply °F', val: cwSupply, set: setCwSupply, ph: '44' },
-                  { label: 'CW Return °F', val: cwReturn, set: setCwReturn, ph: '54' },
-                  { label: 'Flow Rate GPM', val: flowRateGPM, set: setFlowRateGPM, ph: '1200' },
-                  { label: 'Cond. Supply °F', val: condSupply, set: setCondSupply, ph: '85' },
-                  { label: 'Cond. Return °F', val: condReturn, set: setCondReturn, ph: '95' },
-                  { label: 'Electricity Rate $/kWh', val: electricityRate, set: setElectricityRate, ph: '0.12' },
-                ].map(({ label, val, set, ph }) => (
-                  <div key={label}>
+                {([
+                  ['coolingTons', 'Cooling Tons', coolingTons, setCoolingTons, '200'],
+                  ['compressorKW', 'Compressor kW', compressorKW, setCompressorKW, '150'],
+                  ['cwSupplyVal', 'CW Supply Temp °F', cwSupply, setCwSupply, '44'],
+                  ['cwReturnVal', 'CW Return Temp °F', cwReturn, setCwReturn, '54'],
+                  ['flowRateGPM', 'CW Flow GPM', flowRateGPM, setFlowRateGPM, '600'],
+                  ['condSupplyVal', 'Condenser Supply °F', condSupply, setCondSupply, '85'],
+                  ['condReturnVal', 'Condenser Return °F', condReturn, setCondReturn, '95'],
+                  ['electricityRate', 'Electricity Rate $/kWh', electricityRate, setElectricityRate, '0.12'],
+                ] as [string, string, string, (v: string) => void, string][]).map(([key, label, val, setter, ph]) => (
+                  <div key={key}>
                     <label style={LABEL_STYLE}>{label}</label>
-                    <input type="number" value={val} onChange={e => set(e.target.value)} placeholder={ph} style={INPUT_STYLE} />
+                    <input type="number" value={val} onChange={e => setter(e.target.value)} placeholder={ph} style={INPUT_STYLE} />
                   </div>
                 ))}
               </div>
-
-              {/* Output tiles */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {[
-                  { label: 'COP', val: calc.cop, color: ACCENT },
-                  { label: 'EER', val: calc.eer, color: ACCENT },
-                  { label: 'kW/Ton', val: calc.kwPerTon, color: ACCENT },
-                  { label: 'BTU/hr', val: Number(calc.btuPerHr).toLocaleString(), color: ACCENT },
-                  { label: 'Cost/hr', val: `$${calc.costPerHr}`, color: '#fbbf24' },
-                  { label: 'Cost/day', val: `$${calc.costPerDay}`, color: '#fbbf24' },
-                ].map(t => (
-                  <div key={t.label} className="p-4" style={GLASS_TILE}>
-                    <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">{t.label}</p>
-                    <p className="text-xl font-bold" style={{ color: t.color }}>{t.val}</p>
+                  { label: 'COP', val: calc.cop },
+                  { label: 'EER', val: calc.eer },
+                  { label: 'kW/Ton', val: calc.kwPerTon },
+                  { label: 'Chilled Water BTU/hr (k)', val: `${calc.btuHr}k` },
+                  { label: '$/hr', val: `$${calc.hrCost}`, color: '#fbbf24' },
+                  { label: '$/day', val: `$${calc.dayCost}`, color: '#fbbf24' },
+                ].map(m => (
+                  <div key={m.label} className="p-4" style={GLASS_TILE}>
+                    <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">{m.label}</p>
+                    <p className="text-2xl font-bold" style={{ color: m.color ?? ACCENT }}>{m.val}</p>
                   </div>
                 ))}
                 <div className="p-4" style={GLASS_TILE}>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-2">Rating</p>
-                  <span className="text-sm font-bold px-3 py-1 rounded-full" style={{ background: `${calc.ratingColor}18`, color: calc.ratingColor, border: `1px solid ${calc.ratingColor}40` }}>
-                    {calc.rating}
-                  </span>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Rating</p>
+                  <span className="text-sm font-bold px-3 py-1 rounded-full" style={{ background: `${calc.rc}18`, color: calc.rc, border: `1px solid ${calc.rc}40` }}>{calc.rating}</span>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* RESOURCES */}
-        {tab === 'Resources' && (
+        {tab === 'Documents' && (
           <div className="max-w-3xl">
             <div style={GLASS}>
               {CHILLER_INTELLIGENCE.documents.map((doc, i, arr) => (
-                <a key={doc.file} href={`/library/${doc.file}`} target="_blank" rel="noreferrer"
-                  className="flex items-center justify-between px-5 py-3.5 transition-all group"
-                  style={{ borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = `rgba(${ACCENT_RGB},0.02)`; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent'; }}>
+                <div key={doc.file} className="flex items-center justify-between px-5 py-3.5 group"
+                  style={{ borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}>
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded"
                       style={{ color: doc.type === 'pdf' ? '#fb923c' : doc.type === 'xlsx' ? '#34d399' : '#60a5fa', background: 'rgba(255,255,255,0.05)' }}>
                       {doc.type.toUpperCase()}
                     </span>
-                    <span className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors">{doc.label}</span>
+                    <span className="text-sm text-gray-400">{doc.label}</span>
                   </div>
-                  <span className="text-xs text-gray-700 group-hover:text-sky-400 transition-colors">↓</span>
-                </a>
+                  {unlocked
+                    ? <a href={`/library/${doc.file}`} target="_blank" rel="noreferrer" className="text-xs text-gray-700 hover:text-[#38bdf8] transition-colors">↓</a>
+                    : <span title="Purchase to download" className="cursor-not-allowed"><Lock size={11} className="text-gray-700" /></span>
+                  }
+                </div>
               ))}
             </div>
           </div>

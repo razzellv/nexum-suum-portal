@@ -1,11 +1,14 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { Thermometer, ClipboardList, Calculator, BookOpen, Plus, ChevronDown } from "lucide-react";
-import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { Thermometer, Plus, ChevronDown, Lock } from "lucide-react";
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useAuth } from "../../components/AuthContext";
 import { apiPost } from "../lib/api";
 import { loadLogs, saveLogs } from "../lib/logData";
 import { BOILER_INTELLIGENCE } from "../lib/products";
+import { isUnlocked } from "../lib/auth";
+import PreviewBanner from "../../components/PreviewBanner";
+import LockedInput from "../../components/LockedInput";
 
 const GLASS = {
   background: 'rgba(2,10,18,0.75)',
@@ -41,7 +44,7 @@ interface BoilerLog {
   timestamp: number;
 }
 
-const TABS = ['Overview', 'Log Data', 'Calculator', 'Resources'] as const;
+const TABS = ['Compliance Overview', 'Log Data', 'Calculator', 'Documents'] as const;
 type Tab = typeof TABS[number];
 
 const ACCENT = "#00FFE1";
@@ -52,25 +55,6 @@ const EMPTY_FORM = {
   supplyTemp: '', returnTemp: '', supplyPSI: '', returnPSI: '',
   mainPSI: '', waterLevel: '', conductivityPPM: '', pH: '', oilVolume: '',
 };
-
-function getWeekRange() {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun
-  const diff = day === 0 ? -6 : 1 - day; // offset to Monday
-  const mon = new Date(now);
-  mon.setHours(0, 0, 0, 0);
-  mon.setDate(now.getDate() + diff);
-  const sun = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
-  sun.setHours(23, 59, 59, 999);
-  return { start: mon.getTime(), end: sun.getTime() };
-}
-
-function avg(logs: BoilerLog[], key: keyof BoilerLog): string {
-  const vals = logs.map(l => parseFloat(l[key] as string)).filter(v => !isNaN(v) && v > 0);
-  if (!vals.length) return '—';
-  return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
-}
 
 const INPUT_STYLE: React.CSSProperties = {
   background: 'rgba(255,255,255,0.04)',
@@ -92,20 +76,73 @@ const LABEL_STYLE: React.CSSProperties = {
   marginBottom: '4px',
 };
 
+function getWeekRange() {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const mon = new Date(now);
+  mon.setHours(0, 0, 0, 0);
+  mon.setDate(now.getDate() + diff);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  sun.setHours(23, 59, 59, 999);
+  return { start: mon.getTime(), end: sun.getTime() };
+}
+
+function avgNum(logs: BoilerLog[], key: keyof BoilerLog): number {
+  const vals = logs.map(l => parseFloat(l[key] as string)).filter(v => !isNaN(v) && v > 0);
+  if (!vals.length) return 0;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+const DEMO_CHART = Array.from({ length: 14 }, (_, i) => {
+  const d = new Date(2026, 4, 16 + i);
+  return {
+    name: `${d.getMonth() + 1}/${d.getDate()}`,
+    stackTemp: 360 + [24, 18, 31, 12, 28, 9, 35, 22, 15, 40, 27, 8, 33, 19][i],
+    conductivityPPM: 1800 + [120, 80, 210, 60, 180, 30, 250, 100, 70, 300, 150, 40, 220, 90][i],
+  };
+});
+
+const DEMO_LOGS: BoilerLog[] = [
+  { id: 'd1', employeeName: 'J. Martinez', title: 'Boiler Tech', description: 'Routine blowdown boiler 1 — conductivity elevated', dateTime: '2026-05-27T09:15', supplyTemp: '385', returnTemp: '165', supplyPSI: '110', returnPSI: '105', mainPSI: '120', waterLevel: '78', conductivityPPM: '2100', pH: '8.4', oilVolume: '', timestamp: 1748336100000 },
+  { id: 'd2', employeeName: 'R. Thompson', title: 'Sr. Tech', description: 'Water chemistry test — conductivity normal', dateTime: '2026-05-26T14:30', supplyTemp: '392', returnTemp: '168', supplyPSI: '108', returnPSI: '104', mainPSI: '118', waterLevel: '75', conductivityPPM: '1850', pH: '8.2', oilVolume: '', timestamp: 1748263800000 },
+  { id: 'd3', employeeName: 'K. Williams', title: 'Boiler Op', description: 'Stack inspection, purge routine complete', dateTime: '2026-05-24T08:00', supplyTemp: '378', returnTemp: '162', supplyPSI: '112', returnPSI: '107', mainPSI: '122', waterLevel: '80', conductivityPPM: '2250', pH: '8.5', oilVolume: '', timestamp: 1748080800000 },
+  { id: 'd4', employeeName: 'J. Martinez', title: 'Boiler Tech', description: 'PM — Checked LWFCO and pressure relief valve', dateTime: '2026-05-22T11:00', supplyTemp: '395', returnTemp: '170', supplyPSI: '115', returnPSI: '110', mainPSI: '125', waterLevel: '77', conductivityPPM: '1950', pH: '8.3', oilVolume: '', timestamp: 1747908000000 },
+  { id: 'd5', employeeName: 'D. Chen', title: 'Facility Mgr', description: 'Weekly inspection — all systems nominal', dateTime: '2026-05-20T13:00', supplyTemp: '380', returnTemp: '160', supplyPSI: '109', returnPSI: '103', mainPSI: '119', waterLevel: '76', conductivityPPM: '2050', pH: '8.1', oilVolume: '', timestamp: 1747735200000 },
+];
+
+function ChecklistItem({ label, status }: { label: string; status: 'current' | 'due-soon' | 'overdue' | 'preview' }) {
+  const colors = { current: '#22c55e', 'due-soon': '#f59e0b', overdue: '#ef4444', preview: '#4b5563' };
+  const statusLabels = { current: 'Current', 'due-soon': 'Due Soon', overdue: 'Overdue', preview: '—' };
+  const color = colors[status];
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b last:border-b-0" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+      <div className="flex items-center gap-2.5">
+        <span style={{ color: status === 'current' ? '#22c55e' : '#4b5563', fontSize: 14 }}>{status === 'current' ? '☑' : '☐'}</span>
+        <span className="text-sm text-gray-300">{label}</span>
+      </div>
+      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ color, background: `${color}18`, border: `1px solid ${color}40` }}>
+        {statusLabels[status]}
+      </span>
+    </div>
+  );
+}
+
 export default function BoilerPage() {
-  const { user } = useAuth();
-  const [tab, setTab] = useState<Tab>('Overview');
+  useAuth();
+  const unlocked = isUnlocked('boiler');
+  const [tab, setTab] = useState<Tab>('Compliance Overview');
   const [logs, setLogs] = useState<BoilerLog[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [submitting, setSubmitting] = useState(false);
 
-  // Calculator state
   const [bhpMode, setBhpMode] = useState(true);
   const [inputBHP, setInputBHP] = useState('');
   const [inputBTU, setInputBTU] = useState('');
   const [fuelType, setFuelType] = useState<'gas' | 'oil' | 'electric'>('gas');
-  const [stackTemp, setStackTemp] = useState('');
+  const [stackTempCalc, setStackTempCalc] = useState('');
   const [ambientTemp, setAmbientTemp] = useState('70');
   const [o2Pct, setO2Pct] = useState('');
   const [steamPSI, setSteamPSI] = useState('');
@@ -116,49 +153,73 @@ export default function BoilerPage() {
   }, []);
 
   const { start: weekStart, end: weekEnd } = getWeekRange();
+  const displayLogs = useMemo(() => unlocked ? logs : [], [unlocked, logs]);
+  const logsThisWeek = displayLogs.filter(l => l.timestamp >= weekStart && l.timestamp <= weekEnd).length;
 
-  const avgStackTemp = avg(logs, 'supplyTemp');
-  const avgConductivity = avg(logs, 'conductivityPPM');
-  const avgWaterLevel = avg(logs, 'waterLevel');
-  const logsThisWeek = logs.filter(l => l.timestamp >= weekStart && l.timestamp <= weekEnd).length;
+  const combustionScore = useMemo(() => {
+    if (!unlocked) return { val: '94', color: '#22c55e' };
+    const temps = displayLogs.map(l => parseFloat(l.supplyTemp)).filter(v => !isNaN(v) && v > 0);
+    if (!temps.length) return { val: '—', color: '#4b5563' };
+    const pct = Math.round((temps.filter(t => t < 600).length / temps.length) * 100);
+    return { val: `${pct}`, color: pct >= 80 ? '#22c55e' : pct >= 60 ? '#f59e0b' : '#ef4444' };
+  }, [displayLogs, unlocked]);
+
+  const conductivityStatus = useMemo(() => {
+    if (!unlocked) return { label: 'Normal', sub: '1960 PPM (demo)', color: '#22c55e' };
+    const ppm = avgNum(displayLogs, 'conductivityPPM');
+    if (!ppm) return { label: '—', sub: 'No data', color: '#4b5563' };
+    if (ppm > 2500) return { label: 'High', sub: `${ppm.toFixed(0)} PPM`, color: '#ef4444' };
+    if (ppm < 500) return { label: 'Low', sub: `${ppm.toFixed(0)} PPM`, color: '#f59e0b' };
+    return { label: 'Normal', sub: `${ppm.toFixed(0)} PPM`, color: '#22c55e' };
+  }, [displayLogs, unlocked]);
+
+  const avgDelta = useMemo(() => {
+    if (!unlocked) return '218.4°F (demo)';
+    const vals = displayLogs.slice(0, 30).map(l => parseFloat(l.supplyTemp) - parseFloat(l.returnTemp)).filter(v => !isNaN(v));
+    return vals.length ? `${(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)}°F` : '—';
+  }, [displayLogs, unlocked]);
 
   const chartData = useMemo(() => {
-    return [...logs].reverse().slice(0, 20).map(l => ({
-      name: l.dateTime ? l.dateTime.slice(0, 10) : '—',
-      waterLevel: parseFloat(l.waterLevel) || null,
+    if (!unlocked) return DEMO_CHART;
+    return [...logs].reverse().slice(0, 14).map(l => ({
+      name: l.dateTime ? l.dateTime.slice(5, 10) : '—',
+      stackTemp: parseFloat(l.supplyTemp) || null,
       conductivityPPM: parseFloat(l.conductivityPPM) || null,
-      deltaTemp: (parseFloat(l.supplyTemp) - parseFloat(l.returnTemp)) || null,
-      oilVolume: parseFloat(l.oilVolume) || null,
     }));
-  }, [logs]);
+  }, [logs, unlocked]);
 
-  const hasOilData = logs.some(l => l.oilVolume && parseFloat(l.oilVolume) > 0);
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const checklist = useMemo(() => {
+    if (!unlocked) return Array(6).fill('preview') as ('current' | 'due-soon' | 'overdue' | 'preview')[];
+    const wk = displayLogs.filter(l => l.timestamp >= weekStart && l.timestamp <= weekEnd);
+    return [
+      wk.some(l => /blowdown/i.test(l.description)) ? 'current' : 'overdue',
+      wk.some(l => l.conductivityPPM && l.pH) ? 'current' : 'overdue',
+      displayLogs.some(l => parseFloat(l.supplyTemp) < 600) ? 'current' : 'overdue',
+      wk.some(l => l.supplyPSI) ? 'current' : 'due-soon',
+      wk.some(l => l.waterLevel) ? 'current' : 'due-soon',
+      displayLogs.some(l => l.timestamp >= monthStart.getTime() && /pm|preventive/i.test(l.description)) ? 'current' : 'due-soon',
+    ] as ('current' | 'due-soon' | 'overdue' | 'preview')[];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayLogs, unlocked, weekStart, weekEnd]);
 
-  // Calculator computations
   const calc = useMemo(() => {
-    const sT = parseFloat(stackTemp) || 0;
+    const sT = parseFloat(stackTempCalc) || 0;
     const aT = parseFloat(ambientTemp) || 70;
     const bhp = bhpMode ? (parseFloat(inputBHP) || 0) : (parseFloat(inputBTU) || 0) / 33475;
     const fuelHeatValue = fuelType === 'gas' ? 1040 : fuelType === 'oil' ? 140 : 3412;
     const stackLoss = sT > 0 ? (0.24 * (sT - aT)) / fuelHeatValue * 100 : 0;
-    const combEfficiency = Math.max(0, Math.min(100, 100 - stackLoss));
-    const steamOutput = bhp * 34.5;
-    const kwEquiv = bhp * 0.9811;
-    const thermsPerHr = (bhp * 33475) / 100000;
-    const rating = combEfficiency > 85 ? 'Excellent' : combEfficiency > 78 ? 'Good' : combEfficiency > 70 ? 'Fair' : 'Poor';
-    const effColor = combEfficiency > 85 ? '#22c55e' : combEfficiency > 78 ? '#00FFE1' : combEfficiency > 70 ? '#f59e0b' : '#ef4444';
-    const ratingColor = rating === 'Excellent' ? '#22c55e' : rating === 'Good' ? '#00FFE1' : rating === 'Fair' ? '#f59e0b' : '#ef4444';
-    return { combEfficiency: combEfficiency.toFixed(1), bhp: bhp.toFixed(2), steamOutput: steamOutput.toFixed(1), kwEquiv: kwEquiv.toFixed(2), thermsPerHr: thermsPerHr.toFixed(3), rating, effColor, ratingColor };
-  }, [bhpMode, inputBHP, inputBTU, fuelType, stackTemp, ambientTemp]);
+    const eff = Math.max(0, Math.min(100, 100 - stackLoss));
+    const rating = eff > 85 ? 'Excellent' : eff > 78 ? 'Good' : eff > 70 ? 'Fair' : 'Poor';
+    const rc = rating === 'Excellent' ? '#22c55e' : rating === 'Good' ? '#00FFE1' : rating === 'Fair' ? '#f59e0b' : '#ef4444';
+    return { eff: eff.toFixed(1), effColor: rc, bhp: bhp.toFixed(2), steam: (bhp * 34.5).toFixed(1), kw: (bhp * 0.9811).toFixed(2), therms: ((bhp * 33475) / 100000).toFixed(3), rating, rc };
+  }, [bhpMode, inputBHP, inputBTU, fuelType, stackTempCalc, ambientTemp]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!unlocked) return;
     setSubmitting(true);
-    const entry: BoilerLog = {
-      id: crypto.randomUUID(),
-      ...form,
-      timestamp: Date.now(),
-    };
+    const entry: BoilerLog = { id: crypto.randomUUID(), ...form, timestamp: Date.now() };
     const updated = [entry, ...logs];
     saveLogs('boiler', updated);
     try { await apiPost('/logs/boiler', entry); } catch { /* offline */ }
@@ -168,32 +229,15 @@ export default function BoilerPage() {
     setSubmitting(false);
   }
 
-  function logsThisWeekByEmployee(name: string) {
-    return logs.filter(l => l.employeeName === name && l.timestamp >= weekStart && l.timestamp <= weekEnd).length;
-  }
-
-  const canAccess = user && (user.tier === 'boiler' || user.tier === 'facility');
-
-  if (!user) return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <p className="text-gray-500 mb-4 text-sm">Sign in to access Boiler Intelligence.</p>
-    </div>
-  );
-  if (!canAccess) return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <p className="text-gray-500 mb-2 text-sm">Boiler Intelligence requires the Boiler or Facility tier.</p>
-      <a href="https://nexumsuum-facilityintelligence.com/pricing" target="_blank" rel="noreferrer"
-        className="px-4 py-2 rounded-xl text-sm font-bold mt-3" style={{ background: ACCENT, color: '#001923' }}>Upgrade Tier →</a>
-    </div>
-  );
+  const tableRows = unlocked ? logs : DEMO_LOGS;
 
   return (
     <div style={{ background: '#030d14', minHeight: '100%', position: 'relative', zIndex: 1 }}>
-      {/* Header */}
+      {!unlocked && <PreviewBanner tier="boiler" />}
+
       <div className="px-7 pt-7 pb-5 border-b" style={{ borderColor: 'rgba(0,255,225,0.06)' }}>
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: `rgba(${ACCENT_RGB},0.08)`, border: `1px solid rgba(${ACCENT_RGB},0.18)` }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `rgba(${ACCENT_RGB},0.08)`, border: `1px solid rgba(${ACCENT_RGB},0.18)` }}>
             <Thermometer size={18} style={{ color: ACCENT }} />
           </div>
           <div>
@@ -201,30 +245,39 @@ export default function BoilerPage() {
             <p className="text-gray-600 text-xs">Combustion · Safety · Log Data · Analytics</p>
           </div>
         </div>
-
-        {/* 4 stat tiles */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Avg Stack Temp', val: avgStackTemp, unit: '°F' },
-            { label: 'Avg Conductivity', val: avgConductivity, unit: 'PPM' },
-            { label: 'Avg Water Level', val: avgWaterLevel, unit: '%' },
-            { label: 'Logs This Week', val: logsThisWeek.toString(), unit: '' },
-          ].map(t => (
-            <div key={t.label} className="p-4" style={GLASS_TILE}>
-              <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">{t.label}</p>
-              <p className="text-2xl font-bold" style={{ color: ACCENT }}>{t.val}</p>
-              {t.unit && <p className="text-[10px] text-gray-700 mt-0.5">{t.unit}</p>}
-            </div>
-          ))}
+          <div className="p-4" style={GLASS_TILE}>
+            <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Combustion Compliance</p>
+            <p className="text-2xl font-bold" style={{ color: combustionScore.color }}>{combustionScore.val}{combustionScore.val !== '—' && combustionScore.val !== '94' ? '%' : combustionScore.val === '94' ? '%' : ''}</p>
+            <p className="text-[10px] text-gray-700 mt-0.5">stack temp in range</p>
+          </div>
+          <div className="p-4" style={GLASS_TILE}>
+            <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Water Chemistry</p>
+            <span className="inline-block text-sm font-bold px-2 py-0.5 rounded-full" style={{ color: conductivityStatus.color, background: `${conductivityStatus.color}18`, border: `1px solid ${conductivityStatus.color}40` }}>
+              {conductivityStatus.label}
+            </span>
+            <p className="text-[10px] text-gray-700 mt-1.5">{conductivityStatus.sub}</p>
+          </div>
+          <div className="p-4" style={GLASS_TILE}>
+            <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Avg Delta Temp</p>
+            <p className="text-lg font-bold truncate" style={{ color: ACCENT }}>{avgDelta}</p>
+            <p className="text-[10px] text-gray-700 mt-0.5">supply − return</p>
+          </div>
+          <div className="p-4" style={GLASS_TILE}>
+            <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Weekly Log Count</p>
+            <p className="text-2xl font-bold" style={{ color: logsThisWeek >= 5 ? '#22c55e' : '#f59e0b' }}>
+              {unlocked ? logsThisWeek : '—'}<span className="text-sm text-gray-600">/5</span>
+            </p>
+            <p className="text-[10px] text-gray-700 mt-0.5">target: 5/week</p>
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="px-7 border-b" style={{ borderColor: 'rgba(0,255,225,0.06)' }}>
-        <div className="flex gap-5">
+        <div className="flex gap-5 overflow-x-auto">
           {TABS.map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className="py-3.5 text-sm font-medium transition-colors border-b-2 -mb-px"
+              className="py-3.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap"
               style={tab === t ? { color: ACCENT, borderColor: ACCENT } : { color: 'rgba(148,163,184,0.45)', borderColor: 'transparent' }}>
               {t}
             </button>
@@ -234,305 +287,256 @@ export default function BoilerPage() {
 
       <div className="px-7 py-6">
 
-        {/* OVERVIEW */}
-        {tab === 'Overview' && (
+        {tab === 'Compliance Overview' && (
           <div>
             <div className="grid md:grid-cols-2 gap-4 mb-4">
-              {/* Chart 1: Water Level */}
               <div className="p-4" style={GLASS}>
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Water Level %</p>
-                <ResponsiveContainer width="100%" height={160}>
-                  <AreaChart data={chartData}>
-                    <XAxis dataKey="name" tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                    <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(0,255,225,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
-                    <defs>
-                      <linearGradient id="wlGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#00FFE1" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#00FFE1" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="waterLevel" stroke="#00FFE1" fill="url(#wlGrad)" strokeWidth={2} dot={false} connectNulls name="Water Level %" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Chart 2: Conductivity */}
-              <div className="p-4" style={GLASS}>
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Conductivity PPM</p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Stack Temp Trend °F {!unlocked && <span className="text-gray-700">(demo)</span>}</p>
                 <ResponsiveContainer width="100%" height={160}>
                   <LineChart data={chartData}>
                     <XAxis dataKey="name" tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={40} />
-                    <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(56,189,248,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
-                    <Line type="monotone" dataKey="conductivityPPM" stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls name="Conductivity PPM" />
+                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={40} domain={['auto', 'auto']} />
+                    <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(0,255,225,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
+                    <Line type="monotone" dataKey="stackTemp" stroke={ACCENT} strokeWidth={2} dot={false} connectNulls name="Stack Temp °F" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-
-              {/* Chart 3: Delta Temp */}
               <div className="p-4" style={GLASS}>
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Delta Temp (Supply - Return) °F</p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Conductivity PPM {!unlocked && <span className="text-gray-700">(demo)</span>}</p>
                 <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={chartData}>
+                  <AreaChart data={chartData}>
                     <XAxis dataKey="name" tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                    <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(251,191,36,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
-                    <Bar dataKey="deltaTemp" fill="#fbbf24" radius={[4, 4, 0, 0]} name="Delta Temp °F" />
-                  </BarChart>
+                    <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={45} domain={['auto', 'auto']} />
+                    <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(56,189,248,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
+                    <defs>
+                      <linearGradient id="condGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="conductivityPPM" stroke="#38bdf8" fill="url(#condGrad)" strokeWidth={2} dot={false} connectNulls name="Conductivity PPM" />
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
-
-              {/* Chart 4: Oil Volume (conditional) */}
-              {hasOilData && (
-                <div className="p-4" style={GLASS}>
-                  <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Oil Volume</p>
-                  <ResponsiveContainer width="100%" height={160}>
-                    <AreaChart data={chartData}>
-                      <XAxis dataKey="name" tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: '#4b5563', fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                      <Tooltip contentStyle={{ background: '#0a1929', border: '1px solid rgba(167,139,250,0.15)', borderRadius: 8, color: '#e2e8f0', fontSize: 11 }} />
-                      <defs>
-                        <linearGradient id="oilGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <Area type="monotone" dataKey="oilVolume" stroke="#a78bfa" fill="url(#oilGrad)" strokeWidth={2} dot={false} connectNulls name="Oil Volume" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+            </div>
+            <div className="p-5 max-w-2xl" style={GLASS}>
+              <div className="flex items-center gap-2.5 mb-4">
+                <h3 className="font-display text-base font-semibold text-white">Boiler Compliance Checklist</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,255,225,0.1)', color: ACCENT, border: '1px solid rgba(0,255,225,0.25)' }}>
+                  {unlocked ? `${checklist.filter(s => s === 'current').length}/6` : '6 items'}
+                </span>
+                {!unlocked && <span className="text-[10px] text-gray-600 italic">Purchase to track real status</span>}
+              </div>
+              {[
+                'Blowdown logged this week',
+                'Water chemistry tested (conductivity + pH logged)',
+                'Stack temp within range',
+                'Pressure readings logged',
+                'Water level logged',
+                'At least 1 PM entry this month',
+              ].map((label, i) => <ChecklistItem key={label} label={label} status={checklist[i]} />)}
             </div>
           </div>
         )}
 
-        {/* LOG DATA */}
         {tab === 'Log Data' && (
           <div>
-            {/* Add Entry button */}
             <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-gray-500">{logs.length} entries logged</p>
-              <button onClick={() => setShowForm(!showForm)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-                style={{ background: 'rgba(0,255,225,0.08)', color: ACCENT, border: '1px solid rgba(0,255,225,0.18)' }}>
-                {showForm ? <ChevronDown size={14} /> : <Plus size={14} />}
-                {showForm ? 'Hide Form' : 'Add Entry'}
-              </button>
+              <p className="text-sm text-gray-500">{unlocked ? `${logs.length} entries logged` : 'Preview — 5 demo rows'}</p>
+              <LockedInput locked={!unlocked} tier="boiler">
+                <button onClick={() => unlocked && setShowForm(!showForm)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
+                  style={{ background: 'rgba(0,255,225,0.08)', color: ACCENT, border: '1px solid rgba(0,255,225,0.18)' }}>
+                  {showForm ? <ChevronDown size={14} /> : <Plus size={14} />}
+                  {showForm ? 'Hide Form' : 'Add Entry'}
+                </button>
+              </LockedInput>
             </div>
 
-            {/* Add log form */}
-            {showForm && (
+            {showForm && unlocked && (
               <div className="mb-5 p-5" style={GLASS}>
                 <h3 className="font-display text-base font-semibold text-white mb-4">New Boiler Log Entry</h3>
                 <form onSubmit={handleSubmit}>
                   <div className="grid md:grid-cols-3 gap-4 mb-4">
-                    {[
-                      { key: 'employeeName', label: 'Employee Name', type: 'text' },
-                      { key: 'title', label: 'Title', type: 'text' },
-                      { key: 'dateTime', label: 'Date & Time', type: 'datetime-local' },
-                      { key: 'supplyTemp', label: 'Supply Temp °F', type: 'number' },
-                      { key: 'returnTemp', label: 'Return Temp °F', type: 'number' },
-                      { key: 'supplyPSI', label: 'Supply PSI', type: 'number' },
-                      { key: 'returnPSI', label: 'Return PSI', type: 'number' },
-                      { key: 'mainPSI', label: 'Main PSI', type: 'number' },
-                      { key: 'waterLevel', label: 'Water Level %', type: 'number' },
-                      { key: 'conductivityPPM', label: 'Conductivity PPM', type: 'number' },
-                      { key: 'pH', label: 'pH', type: 'number' },
-                      { key: 'oilVolume', label: 'Oil Volume (opt.)', type: 'number' },
-                    ].map(({ key, label, type }) => (
+                    {([
+                      ['employeeName', 'Employee Name', 'text'],
+                      ['title', 'Title', 'text'],
+                      ['dateTime', 'Date & Time', 'datetime-local'],
+                      ['supplyTemp', 'Supply Temp °F', 'number'],
+                      ['returnTemp', 'Return Temp °F', 'number'],
+                      ['supplyPSI', 'Supply PSI', 'number'],
+                      ['returnPSI', 'Return PSI', 'number'],
+                      ['mainPSI', 'Main PSI', 'number'],
+                      ['waterLevel', 'Water Level %', 'number'],
+                      ['conductivityPPM', 'Conductivity PPM', 'number'],
+                      ['pH', 'pH', 'number'],
+                      ['oilVolume', 'Oil Vol. (opt.)', 'number'],
+                    ] as [string, string, string][]).map(([key, label, type]) => (
                       <div key={key}>
                         <label style={LABEL_STYLE}>{label}</label>
                         <input type={type} value={(form as Record<string, string>)[key]}
-                          onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                          style={INPUT_STYLE} />
+                          onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} style={INPUT_STYLE} />
                       </div>
                     ))}
                     <div className="md:col-span-3">
                       <label style={LABEL_STYLE}>Description</label>
                       <textarea value={form.description} rows={3}
+                        placeholder="Blowdown boiler 1 routine — noticed drift in conductivity"
                         onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                         style={{ ...INPUT_STYLE, resize: 'none' }} />
                     </div>
                   </div>
                   <div className="flex gap-3">
                     <button type="submit" disabled={submitting}
-                      className="px-6 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                      className="px-6 py-2.5 rounded-xl text-sm font-semibold"
                       style={{ background: 'rgba(0,255,225,0.12)', color: ACCENT, border: '1px solid rgba(0,255,225,0.25)' }}>
                       {submitting ? 'Saving…' : 'Submit Entry →'}
                     </button>
                     <button type="button" onClick={() => setShowForm(false)}
-                      className="px-4 py-2.5 rounded-xl text-sm text-gray-500"
-                      style={{ border: '1px solid rgba(255,255,255,0.08)' }}>Cancel</button>
+                      className="px-4 py-2.5 rounded-xl text-sm text-gray-500" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>Cancel</button>
                   </div>
                 </form>
               </div>
             )}
 
-            {/* Neon table */}
-            {logs.length === 0 ? (
-              <div className="p-10 text-center" style={GLASS}>
-                <p className="text-gray-600 text-sm">No logs yet — add your first entry above.</p>
+            <div style={{ ...GLASS, opacity: unlocked ? 1 : 0.7 }}>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px]">
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: 'rgba(0,255,225,0.12)' }}>
+                      {['Employee', 'Title', 'Date / Desc', 'Supply°F', 'Return°F', 'S-PSI', 'R-PSI', 'Main PSI', 'Water%', 'Cond.PPM', 'pH', 'Week'].map(h => (
+                        <th key={h} className="px-3 py-2 text-left text-[10px] uppercase tracking-[0.15em] font-normal" style={{ color: `rgba(${ACCENT_RGB},0.5)` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableRows.length === 0 ? (
+                      <tr><td colSpan={12} className="px-4 py-10 text-center text-gray-600 text-sm">No logs yet — add your first entry above.</td></tr>
+                    ) : tableRows.map((log, idx) => (
+                      <tr key={log.id} className="border-b font-mono text-sm text-gray-300 hover:bg-[rgba(0,255,225,0.02)] transition-colors" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+                        <td className="px-3 py-2 max-w-[100px] truncate">{log.employeeName || '—'}</td>
+                        <td className="px-3 py-2 max-w-[80px] truncate">{log.title || '—'}</td>
+                        <td className="px-3 py-2 max-w-[160px]">
+                          <div className="text-[10px] text-gray-600">{log.dateTime || '—'}</div>
+                          <div className="truncate text-xs text-gray-500">{log.description}</div>
+                        </td>
+                        <td className="px-3 py-2">{log.supplyTemp || '—'}</td>
+                        <td className="px-3 py-2">{log.returnTemp || '—'}</td>
+                        <td className="px-3 py-2">{log.supplyPSI || '—'}</td>
+                        <td className="px-3 py-2">{log.returnPSI || '—'}</td>
+                        <td className="px-3 py-2">{log.mainPSI || '—'}</td>
+                        <td className="px-3 py-2">{log.waterLevel || '—'}</td>
+                        <td className="px-3 py-2">{log.conductivityPPM || '—'}</td>
+                        <td className="px-3 py-2">{log.pH || '—'}</td>
+                        <td className="px-3 py-2">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ border: `1px solid rgba(${ACCENT_RGB},0.3)`, color: ACCENT }}>
+                            {unlocked ? logs.filter(l => l.employeeName === log.employeeName && l.timestamp >= weekStart && l.timestamp <= weekEnd).length : idx + 1}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ) : (
-              <div style={GLASS}>
-                {/* Header */}
-                <div className="grid px-4 py-2 border-b" style={{
-                  gridTemplateColumns: '1fr 1fr 2fr 80px 80px 70px 70px 80px 80px 80px 50px 90px',
-                  borderColor: 'rgba(0,255,225,0.12)',
-                }}>
-                  {['Employee', 'Title', 'Timestamp / Desc', 'Supply°F', 'Return°F', 'S PSI', 'R PSI', 'Main PSI', 'Water%', 'Cond.PPM', 'pH', 'This Week'].map(h => (
-                    <span key={h} className="text-[10px] uppercase tracking-[0.15em]" style={{ color: 'rgba(0,255,225,0.5)' }}>{h}</span>
-                  ))}
+              {!unlocked && (
+                <div className="px-5 py-3 border-t text-center" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+                  <span className="text-xs text-gray-600 flex items-center justify-center gap-1.5">
+                    <Lock size={10} /> Demo data — purchase Boiler Intelligence to log real data
+                  </span>
                 </div>
-                {logs.map(log => {
-                  const weekCount = logsThisWeekByEmployee(log.employeeName);
-                  return (
-                    <div key={log.id} className="grid px-4 py-2 border-b transition-colors hover:bg-[rgba(0,255,225,0.025)] font-mono text-sm text-gray-300"
-                      style={{
-                        gridTemplateColumns: '1fr 1fr 2fr 80px 80px 70px 70px 80px 80px 80px 50px 90px',
-                        borderColor: 'rgba(255,255,255,0.04)',
-                      }}>
-                      <span className="truncate">{log.employeeName || '—'}</span>
-                      <span className="truncate">{log.title || '—'}</span>
-                      <div className="truncate">
-                        <div className="text-[10px] text-gray-600">{log.dateTime || '—'}</div>
-                        <div className="truncate text-xs text-gray-500">{log.description}</div>
-                      </div>
-                      <span>{log.supplyTemp || '—'}</span>
-                      <span>{log.returnTemp || '—'}</span>
-                      <span>{log.supplyPSI || '—'}</span>
-                      <span>{log.returnPSI || '—'}</span>
-                      <span>{log.mainPSI || '—'}</span>
-                      <span>{log.waterLevel || '—'}</span>
-                      <span>{log.conductivityPPM || '—'}</span>
-                      <span>{log.pH || '—'}</span>
-                      <span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full"
-                          style={{ border: '1px solid rgba(0,255,225,0.3)', color: ACCENT }}>
-                          {weekCount}
-                        </span>
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
 
-        {/* CALCULATOR */}
         {tab === 'Calculator' && (
           <div className="max-w-3xl">
             <div className="p-6" style={GLASS}>
-              <h2 className="font-display text-2xl font-bold text-white mb-6">Boiler Efficiency Calculator</h2>
-
-              {/* Input mode toggle */}
+              <h2 className="font-display text-2xl font-bold text-white mb-1">Boiler Efficiency Calculator</h2>
+              <p className="text-gray-600 text-xs mb-6">Free to calculate — no purchase required</p>
               <div className="flex gap-3 mb-5">
-                <button onClick={() => setBhpMode(true)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-                  style={bhpMode ? { background: 'rgba(0,255,225,0.12)', color: ACCENT, border: '1px solid rgba(0,255,225,0.3)' }
-                    : { background: 'rgba(255,255,255,0.03)', color: '#6b7280', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  BHP Input
-                </button>
-                <button onClick={() => setBhpMode(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-                  style={!bhpMode ? { background: 'rgba(0,255,225,0.12)', color: ACCENT, border: '1px solid rgba(0,255,225,0.3)' }
-                    : { background: 'rgba(255,255,255,0.03)', color: '#6b7280', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  BTU/hr Input
-                </button>
+                {[{ label: 'BHP Input', val: true }, { label: 'BTU/hr Input', val: false }].map(({ label, val }) => (
+                  <button key={label} onClick={() => setBhpMode(val)}
+                    className="px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+                    style={bhpMode === val ? { background: 'rgba(0,255,225,0.12)', color: ACCENT, border: '1px solid rgba(0,255,225,0.3)' } : { background: 'rgba(255,255,255,0.03)', color: '#6b7280', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    {label}
+                  </button>
+                ))}
               </div>
-
               <div className="grid md:grid-cols-3 gap-4 mb-6">
                 <div>
-                  <label style={LABEL_STYLE}>{bhpMode ? 'Boiler HP (BHP)' : 'BTU/hr Input'}</label>
-                  <input type="number" value={bhpMode ? inputBHP : inputBTU}
-                    onChange={e => bhpMode ? setInputBHP(e.target.value) : setInputBTU(e.target.value)}
-                    placeholder={bhpMode ? '150' : '5000000'} style={INPUT_STYLE} />
+                  <label style={LABEL_STYLE}>{bhpMode ? 'Boiler HP (BHP)' : 'BTU/hr'}</label>
+                  <input type="number" value={bhpMode ? inputBHP : inputBTU} onChange={e => bhpMode ? setInputBHP(e.target.value) : setInputBTU(e.target.value)} placeholder={bhpMode ? '150' : '5000000'} style={INPUT_STYLE} />
                 </div>
                 <div>
                   <label style={LABEL_STYLE}>Fuel Type</label>
-                  <select value={fuelType} onChange={e => setFuelType(e.target.value as 'gas' | 'oil' | 'electric')}
-                    style={INPUT_STYLE}>
+                  <select value={fuelType} onChange={e => setFuelType(e.target.value as 'gas' | 'oil' | 'electric')} style={INPUT_STYLE}>
                     <option value="gas">Natural Gas</option>
-                    <option value="oil">Fuel Oil</option>
+                    <option value="oil">#2 Oil / #6 Oil</option>
                     <option value="electric">Electric</option>
                   </select>
                 </div>
                 <div>
                   <label style={LABEL_STYLE}>Stack Temp °F</label>
-                  <input type="number" value={stackTemp} onChange={e => setStackTemp(e.target.value)} placeholder="400" style={INPUT_STYLE} />
+                  <input type="number" value={stackTempCalc} onChange={e => setStackTempCalc(e.target.value)} placeholder="400" style={INPUT_STYLE} />
                 </div>
                 <div>
                   <label style={LABEL_STYLE}>Ambient Temp °F</label>
                   <input type="number" value={ambientTemp} onChange={e => setAmbientTemp(e.target.value)} placeholder="70" style={INPUT_STYLE} />
                 </div>
                 <div>
-                  <label style={LABEL_STYLE}>O₂ % (optional)</label>
+                  <label style={LABEL_STYLE}>O₂ % in Flue Gas</label>
                   <input type="number" value={o2Pct} onChange={e => setO2Pct(e.target.value)} placeholder="3.5" style={INPUT_STYLE} />
                 </div>
                 <div>
-                  <label style={LABEL_STYLE}>Steam PSI (optional)</label>
+                  <label style={LABEL_STYLE}>Steam Pressure PSI</label>
                   <input type="number" value={steamPSI} onChange={e => setSteamPSI(e.target.value)} placeholder="125" style={INPUT_STYLE} />
                 </div>
                 <div>
-                  <label style={LABEL_STYLE}>Feedwater Temp °F (opt.)</label>
+                  <label style={LABEL_STYLE}>Feedwater Temp °F</label>
                   <input type="number" value={feedwaterTemp} onChange={e => setFeedwaterTemp(e.target.value)} placeholder="180" style={INPUT_STYLE} />
                 </div>
               </div>
-
-              {/* Output tiles 2x3 */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <div className="p-4 md:col-span-1" style={GLASS_TILE}>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Combustion Efficiency</p>
-                  <p className="text-3xl font-bold" style={{ color: calc.effColor }}>{calc.combEfficiency}%</p>
-                </div>
-                <div className="p-4" style={GLASS_TILE}>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">BHP</p>
-                  <p className="text-2xl font-bold" style={{ color: ACCENT }}>{calc.bhp}</p>
-                </div>
-                <div className="p-4" style={GLASS_TILE}>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Steam Output lbs/hr</p>
-                  <p className="text-2xl font-bold" style={{ color: ACCENT }}>{calc.steamOutput}</p>
-                </div>
-                <div className="p-4" style={GLASS_TILE}>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">kW Equivalent</p>
-                  <p className="text-2xl font-bold" style={{ color: ACCENT }}>{calc.kwEquiv}</p>
-                </div>
-                <div className="p-4" style={GLASS_TILE}>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Therms/hr</p>
-                  <p className="text-2xl font-bold" style={{ color: ACCENT }}>{calc.thermsPerHr}</p>
-                </div>
+                {[
+                  { label: 'Combustion Efficiency', val: `${calc.eff}%`, color: calc.effColor, large: true },
+                  { label: 'BHP', val: calc.bhp, color: ACCENT, large: false },
+                  { label: 'Steam Output lbs/hr', val: calc.steam, color: ACCENT, large: false },
+                  { label: 'kW Equivalent', val: calc.kw, color: ACCENT, large: false },
+                  { label: 'Therms/hr', val: calc.therms, color: ACCENT, large: false },
+                ].map(m => (
+                  <div key={m.label} className="p-4" style={GLASS_TILE}>
+                    <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">{m.label}</p>
+                    <p className={`${m.large ? 'text-3xl' : 'text-2xl'} font-bold`} style={{ color: m.color }}>{m.val}</p>
+                  </div>
+                ))}
                 <div className="p-4" style={GLASS_TILE}>
                   <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Rating</p>
-                  <span className="text-sm font-bold px-3 py-1 rounded-full" style={{ background: `${calc.ratingColor}18`, color: calc.ratingColor, border: `1px solid ${calc.ratingColor}40` }}>
-                    {calc.rating}
-                  </span>
+                  <span className="text-sm font-bold px-3 py-1 rounded-full" style={{ background: `${calc.rc}18`, color: calc.rc, border: `1px solid ${calc.rc}40` }}>{calc.rating}</span>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* RESOURCES */}
-        {tab === 'Resources' && (
+        {tab === 'Documents' && (
           <div className="max-w-3xl">
             <div style={GLASS}>
               {BOILER_INTELLIGENCE.documents.map((doc, i, arr) => (
-                <a key={doc.file} href={`/library/${doc.file}`} target="_blank" rel="noreferrer"
-                  className="flex items-center justify-between px-5 py-3.5 transition-all group"
-                  style={{ borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(0,255,225,0.02)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent'; }}>
+                <div key={doc.file} className="flex items-center justify-between px-5 py-3.5 group"
+                  style={{ borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}>
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded"
                       style={{ color: doc.type === 'pdf' ? '#fb923c' : doc.type === 'xlsx' ? '#34d399' : '#60a5fa', background: 'rgba(255,255,255,0.05)' }}>
                       {doc.type.toUpperCase()}
                     </span>
-                    <span className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors">{doc.label}</span>
+                    <span className="text-sm text-gray-400">{doc.label}</span>
                   </div>
-                  <span className="text-xs text-gray-700 group-hover:text-[#00FFE1] transition-colors">↓</span>
-                </a>
+                  {unlocked
+                    ? <a href={`/library/${doc.file}`} target="_blank" rel="noreferrer" className="text-xs text-gray-700 hover:text-[#00FFE1] transition-colors">↓</a>
+                    : <span title="Purchase to download" className="cursor-not-allowed"><Lock size={11} className="text-gray-700" /></span>
+                  }
+                </div>
               ))}
             </div>
           </div>

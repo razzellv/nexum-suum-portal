@@ -12,6 +12,7 @@ import {
   Zap,
   Shield,
   FileCheck,
+  BookMarked,
 } from "lucide-react";
 
 const navItems = [
@@ -19,6 +20,7 @@ const navItems = [
   { name: "Boiler Intelligence",  href: "/boiler",     icon: Flame,           color: "text-[#00FFE1]"    },
   { name: "Chiller Intelligence", href: "/chiller",    icon: Snowflake,       color: "text-sky-400"      },
   { name: "Facility Intelligence",href: "/facility",   icon: Building2,       color: "text-amber-400"    },
+  { name: "FI PMO Playbook",      href: "/playbook",   icon: BookMarked,      color: "text-purple-300"   },
   { name: "Virtuous Ethics Log",  href: "/virtuous",   icon: Shield,          color: "text-purple-400"   },
   { name: "Compliance Center",    href: "/compliance", icon: FileCheck,       color: "text-amber-400"    },
 ];

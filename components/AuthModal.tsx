@@ -6,15 +6,16 @@ import { Tier, FILiteUser, loadUser, saveUser, TIER_LABELS } from "../app/lib/au
 
 interface Props {
   onClose: () => void;
+  defaultTier?: Exclude<Tier, 'playbook'>;
 }
 
-const TIERS: { value: Tier; label: string; desc: string; color: string }[] = [
-  { value: "boiler",   label: "Boiler Intelligence",   desc: "Combustion, log sheets, safety protocols, Looker dashboard", color: "#00FFE1" },
-  { value: "chiller",  label: "Chiller Intelligence",  desc: "Chilled water logs, cooling tower, refrigerant monitoring",  color: "#38bdf8" },
-  { value: "facility", label: "Facility Intelligence", desc: "All systems: SOPs, compliance, Virtuous logger, dashboards",  color: "#fbbf24" },
+const TIERS: { value: Exclude<Tier, 'playbook'>; label: string; desc: string; color: string }[] = [
+  { value: "boiler",   label: "Boiler Intelligence",        desc: "Combustion, log sheets, safety protocols, Looker dashboard", color: "#00FFE1" },
+  { value: "chiller",  label: "Chiller Intelligence",       desc: "Chilled water logs, cooling tower, refrigerant monitoring",  color: "#38bdf8" },
+  { value: "facility", label: "Facility Intelligence Lite", desc: "All systems: SOPs, compliance, Virtuous logger, dashboards",  color: "#fbbf24" },
 ];
 
-export default function AuthModal({ onClose }: Props) {
+export default function AuthModal({ onClose, defaultTier }: Props) {
   const { setUser } = useAuth();
   const [tab, setTab] = useState<"login" | "register">("register");
 
@@ -22,7 +23,7 @@ export default function AuthModal({ onClose }: Props) {
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [email, setEmail] = useState("");
-  const [tier, setTier] = useState<Tier>("boiler");
+  const [tier, setTier] = useState<Exclude<Tier, 'playbook'>>(defaultTier ?? "boiler");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
