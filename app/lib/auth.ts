@@ -1,4 +1,4 @@
-export type Tier = 'boiler' | 'chiller' | 'facility';
+export type Tier = 'boiler' | 'chiller' | 'facility' | 'playbook';
 
 export interface FILiteUser {
   email: string;
@@ -42,7 +42,14 @@ export function canAccessTier(userTier: Tier, requiredTier: Tier): boolean {
   return userTier === requiredTier;
 }
 
-export const TIER_PRICE_IDS: Record<Tier, string> = {
+export function isUnlocked(requiredTier: Tier): boolean {
+  if (requiredTier === 'playbook') return true;
+  const user = loadUser();
+  if (!user) return false;
+  return user.tier === 'facility' || user.tier === requiredTier;
+}
+
+export const TIER_PRICE_IDS: Record<'boiler' | 'chiller' | 'facility', string> = {
   boiler:   'price_1SzoS9Dfw4bOR2dfaWJ6UqkB',
   chiller:  'price_1SzoSoDfw4bOR2dfTqTf3dJN',
   facility: 'price_1SzoTkDfw4bOR2dfFzvTjft8',
@@ -51,5 +58,6 @@ export const TIER_PRICE_IDS: Record<Tier, string> = {
 export const TIER_LABELS: Record<Tier, string> = {
   boiler:   'Boiler Intelligence',
   chiller:  'Chiller Intelligence',
-  facility: 'Facility Intelligence',
+  facility: 'Facility Intelligence Lite',
+  playbook: 'FI PMO Playbook',
 };
