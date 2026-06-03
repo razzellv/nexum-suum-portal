@@ -9,6 +9,17 @@ import { CHILLER_INTELLIGENCE } from "../lib/products";
 import { isUnlocked } from "../lib/auth";
 import PreviewBanner from "../../components/PreviewBanner";
 import LockedInput from "../../components/LockedInput";
+import DownloadGate, { DownloadGateDoc } from "../../components/DownloadGate";
+
+const CHILLER_DOCS: { name: string; type: DownloadGateDoc['type']; fileUrl: string; description: string }[] = [
+  { name: 'Chiller Pre-Op Checklist', type: 'Checklist', fileUrl: '#', description: 'Daily startup inspection checklist' },
+  { name: 'Refrigerant Log Sheet', type: 'Excel', fileUrl: '#', description: 'Refrigerant pressures and temps tracking' },
+  { name: 'Chiller EOP — Emergency Shutdown', type: 'EOP', fileUrl: '#', description: 'Emergency shutdown and lockout procedure' },
+  { name: 'Cooling Tower SOP', type: 'SOP', fileUrl: '#', description: 'Cooling tower startup and seasonal shutdown' },
+  { name: 'Basin Water Treatment Log', type: 'Excel', fileUrl: '#', description: 'Hardness, pH, biocide tracking' },
+  { name: 'COP/EER Reference Card', type: 'Reference', fileUrl: '#', description: 'Efficiency benchmarks by chiller type' },
+  ...CHILLER_INTELLIGENCE.documents.map(d => ({ name: d.label, type: (d.type === 'pdf' ? 'PDF' : d.type === 'xlsx' ? 'Excel' : 'Reference') as DownloadGateDoc['type'], fileUrl: `/library/${d.file}`, description: d.label })),
+];
 
 const GLASS = {
   background: 'rgba(2,10,18,0.75)',
@@ -139,6 +150,7 @@ export default function ChillerPage() {
   const [tab, setTab] = useState<Tab>('Compliance Overview');
   const [logs, setLogs] = useState<ChillerLog[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [gateDoc, setGateDoc] = useState<DownloadGateDoc | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [submitting, setSubmitting] = useState(false);
 
@@ -241,6 +253,7 @@ export default function ChillerPage() {
 
   return (
     <div style={{ background: '#030d14', minHeight: '100%', position: 'relative', zIndex: 1 }}>
+      {gateDoc && <DownloadGate document={gateDoc} onClose={() => setGateDoc(null)} />}
       {!unlocked && <PreviewBanner tier="chiller" />}
 
       <div className="px-7 pt-7 pb-5 border-b" style={{ borderColor: 'rgba(56,189,248,0.06)' }}>
@@ -504,20 +517,28 @@ export default function ChillerPage() {
         {tab === 'Documents' && (
           <div className="max-w-3xl">
             <div style={GLASS}>
-              {CHILLER_INTELLIGENCE.documents.map((doc, i, arr) => (
-                <div key={doc.file} className="flex items-center justify-between px-5 py-3.5 group"
+              {CHILLER_DOCS.map((doc, i, arr) => (
+                <div key={doc.name} className="flex items-center justify-between px-5 py-3.5 group"
                   style={{ borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}>
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded"
-                      style={{ color: doc.type === 'pdf' ? '#fb923c' : doc.type === 'xlsx' ? '#34d399' : '#60a5fa', background: 'rgba(255,255,255,0.05)' }}>
-                      {doc.type.toUpperCase()}
+                      style={{ color: doc.type === 'EOP' ? '#ef4444' : doc.type === 'Excel' ? '#34d399' : doc.type === 'SOP' ? '#38bdf8' : doc.type === 'Safety' ? '#f59e0b' : '#60a5fa', background: 'rgba(255,255,255,0.05)' }}>
+                      {doc.type}
                     </span>
-                    <span className="text-sm text-gray-400">{doc.label}</span>
+                    <div>
+                      <p className="text-sm text-gray-300">{doc.name}</p>
+                      <p className="text-xs text-gray-600">{doc.description}</p>
+                    </div>
                   </div>
-                  {unlocked
-                    ? <a href={`/library/${doc.file}`} target="_blank" rel="noreferrer" className="text-xs text-gray-700 hover:text-[#38bdf8] transition-colors">↓</a>
-                    : <span title="Purchase to download" className="cursor-not-allowed"><Lock size={11} className="text-gray-700" /></span>
-                  }
+                  <button
+                    onClick={() => setGateDoc({ name: doc.name, type: doc.type, fileUrl: doc.fileUrl, package: 'chiller' })}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0"
+                    style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.25)', color: '#38bdf8' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(56,189,248,0.15)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'rgba(56,189,248,0.08)')}
+                  >
+                    ↓ Download
+                  </button>
                 </div>
               ))}
             </div>
