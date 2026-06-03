@@ -7,6 +7,7 @@ import { FACILITY_INTELLIGENCE_ADVANCED } from "../lib/products";
 import { isUnlocked } from "../lib/auth";
 import PreviewBanner from "../../components/PreviewBanner";
 import LockedInput from "../../components/LockedInput";
+import DownloadGate, { DownloadGateDoc } from "../../components/DownloadGate";
 
 const GLASS = {
   background: 'rgba(2,10,18,0.75)',
@@ -88,6 +89,16 @@ function ChecklistItem({ label, status }: { label: string; status: 'current' | '
   );
 }
 
+const FACILITY_DOCS: { name: string; type: DownloadGateDoc['type']; fileUrl: string; description: string }[] = [
+  { name: 'Compliance Calendar', type: 'Reference', fileUrl: '#', description: 'Annual regulatory inspection schedule' },
+  { name: 'PM Schedule Template', type: 'Excel', fileUrl: '#', description: 'Preventive maintenance tracking spreadsheet' },
+  { name: 'Multi-System Inspection Log', type: 'Checklist', fileUrl: '#', description: 'Combined boiler + chiller walk-through form' },
+  { name: 'OSHA 300 Log Template', type: 'Excel', fileUrl: '#', description: 'Recordable injury/illness log template' },
+  { name: 'Water Chemistry Baseline Guide', type: 'Reference', fileUrl: '#', description: 'Acceptable ranges for boiler and cooling water' },
+  { name: 'Facility SOP Master Index', type: 'SOP', fileUrl: '#', description: 'Master list of all facility SOPs with revision dates' },
+  ...FACILITY_INTELLIGENCE_ADVANCED.documents.map(d => ({ name: d.label, type: (d.type === 'pdf' ? 'PDF' : d.type === 'xlsx' ? 'Excel' : 'Reference') as DownloadGateDoc['type'], fileUrl: `/library/${d.file}`, description: d.label })),
+];
+
 const DEMO_BOILER_LOGS: BoilerLog[] = [
   { id: 'db1', employeeName: 'J. Martinez', title: 'Boiler Tech', description: 'Routine check', dateTime: '2026-05-27T09:00', supplyTemp: '385', returnTemp: '165', supplyPSI: '110', returnPSI: '105', mainPSI: '120', waterLevel: '78', conductivityPPM: '2100', pH: '8.4', oilVolume: '', timestamp: 1748336400000 },
   { id: 'db2', employeeName: 'R. Thompson', title: 'Sr. Tech', description: 'Blowdown boiler 1', dateTime: '2026-05-26T14:00', supplyTemp: '392', returnTemp: '168', supplyPSI: '108', returnPSI: '104', mainPSI: '118', waterLevel: '75', conductivityPPM: '1850', pH: '8.2', oilVolume: '', timestamp: 1748264400000 },
@@ -108,6 +119,7 @@ export default function FacilityPage() {
   const [virtEntries, setVirtEntries] = useState<VirtuousEntry[]>([]);
 
   const [virtForm, setVirtForm] = useState<{ inspectionType: string; finding: string; severity: VirtuousEntry['severity']; status: VirtuousEntry['status'] }>({ inspectionType: '', finding: '', severity: 'medium', status: 'open' });
+  const [gateDoc, setGateDoc] = useState<DownloadGateDoc | null>(null);
 
   const [oat, setOat] = useState('');
   const [boilerSupplyTarget, setBoilerSupplyTarget] = useState('');
@@ -252,6 +264,7 @@ export default function FacilityPage() {
 
   return (
     <div style={{ background: '#030d14', minHeight: '100%', position: 'relative', zIndex: 1 }}>
+      {gateDoc && <DownloadGate document={gateDoc} onClose={() => setGateDoc(null)} />}
       {!unlocked && <PreviewBanner tier="facility" />}
 
       <div className="px-7 pt-7 pb-5 border-b" style={{ borderColor: 'rgba(251,191,36,0.06)' }}>
@@ -512,20 +525,28 @@ export default function FacilityPage() {
         {tab === 'Documents' && (
           <div className="max-w-3xl">
             <div style={GLASS}>
-              {FACILITY_INTELLIGENCE_ADVANCED.documents.map((doc, i, arr) => (
-                <div key={doc.file} className="flex items-center justify-between px-5 py-3.5 group"
+              {FACILITY_DOCS.map((doc, i, arr) => (
+                <div key={doc.name} className="flex items-center justify-between px-5 py-3.5 group"
                   style={{ borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}>
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded"
-                      style={{ color: doc.type === 'pdf' ? '#fb923c' : doc.type === 'xlsx' ? '#34d399' : '#60a5fa', background: 'rgba(255,255,255,0.05)' }}>
-                      {doc.type.toUpperCase()}
+                      style={{ color: doc.type === 'EOP' ? '#ef4444' : doc.type === 'Excel' ? '#34d399' : doc.type === 'SOP' ? '#38bdf8' : doc.type === 'Safety' ? '#f59e0b' : '#fb923c', background: 'rgba(255,255,255,0.05)' }}>
+                      {doc.type}
                     </span>
-                    <span className="text-sm text-gray-400">{doc.label}</span>
+                    <div>
+                      <p className="text-sm text-gray-300">{doc.name}</p>
+                      <p className="text-xs text-gray-600">{doc.description}</p>
+                    </div>
                   </div>
-                  {unlocked
-                    ? <a href={`/library/${doc.file}`} target="_blank" rel="noreferrer" className="text-xs text-gray-700 hover:text-[#fbbf24] transition-colors">↓</a>
-                    : <span title="Purchase to download" className="cursor-not-allowed"><Lock size={11} className="text-gray-700" /></span>
-                  }
+                  <button
+                    onClick={() => setGateDoc({ name: doc.name, type: doc.type, fileUrl: doc.fileUrl, package: 'facility' })}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0"
+                    style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', color: '#fbbf24' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(251,191,36,0.15)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'rgba(251,191,36,0.08)')}
+                  >
+                    ↓ Download
+                  </button>
                 </div>
               ))}
             </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Library, Download, FileText, BarChart3, ExternalLink } from "lucide-react";
+import DownloadGate, { DownloadGateDoc } from "../../components/DownloadGate";
 import {
   BOILER_INTELLIGENCE,
   CHILLER_INTELLIGENCE,
@@ -91,9 +92,16 @@ const TYPE_COLORS: Record<string, string> = {
   xlsx: "bg-green-900/30 border-green-700/40 text-green-400",
 };
 
+function docTypeToGate(t: string): DownloadGateDoc['type'] {
+  if (t === 'xlsx') return 'Excel';
+  if (t === 'pdf') return 'PDF';
+  return 'Reference';
+}
+
 export default function LibraryPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
+  const [gateDoc, setGateDoc] = useState<DownloadGateDoc | null>(null);
 
   const visibleSections = SECTIONS.filter(
     (s) => filter === "all" || s.category === filter
@@ -103,6 +111,7 @@ export default function LibraryPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
+      {gateDoc && <DownloadGate document={gateDoc} onClose={() => setGateDoc(null)} />}
       <PageHeader
         icon={Library}
         title="Document Library"
@@ -211,9 +220,13 @@ export default function LibraryPage() {
                     <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${TYPE_COLORS[doc.type] ?? TYPE_COLORS.pdf}`}>
                       {doc.type}
                     </span>
-                    <a
-                      href={`/library/${doc.file}`}
-                      download
+                    <button
+                      onClick={() => setGateDoc({
+                        name: doc.label,
+                        type: docTypeToGate(doc.type),
+                        fileUrl: `/library/${doc.file}`,
+                        package: (section.id === 'document' ? 'facility' : section.id) as DownloadGateDoc['package'],
+                      })}
                       title={`Download ${doc.label}`}
                       className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
                       style={{
@@ -221,12 +234,12 @@ export default function LibraryPage() {
                         border: `1px solid rgba(${section.accentRgb}, 0.25)`,
                         color: section.accent,
                       }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = `rgba(${section.accentRgb}, 0.15)`; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = `rgba(${section.accentRgb}, 0.08)`; }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = `rgba(${section.accentRgb}, 0.15)`; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = `rgba(${section.accentRgb}, 0.08)`; }}
                     >
                       <Download size={12} />
                       Download
-                    </a>
+                    </button>
                   </div>
                 ))}
               </div>
